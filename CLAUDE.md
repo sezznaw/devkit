@@ -9,8 +9,10 @@ fill three values into `devkit.yaml` in the project directory, then
 `devkit ngs <service>` produces a complete runnable Kitex (Thrift) service with
 all tools installed. `devkit update` later upgrades the scaffolding. Templates
 live in a separate git repo, `devkit-registry` (sibling checkout at
-`../devkit-registry`), fetched from GitHub; shared runtime code is the
-`../common` Go module.
+`../devkit-registry`), fetched from GitHub; shared runtime code is the Go
+module `github.com/sezznaw/devkit-common` (GitHub repo `sezznaw/devkit-common`,
+sibling checkout at `../common`; the local directory name differs from the
+repo name).
 
 The visible command surface is deliberately tiny: `ngs`, `update`,
 `self-update`, `doctor`, `version` (`config` and `completion` are hidden).
@@ -20,9 +22,16 @@ without being asked. Everything is GitHub-based
 (releases, registry, IDL/common clones); the original self-hosted-git design
 was dropped on 2026-09-19.
 
-The placeholder organisation `sezznaw` is baked into go.mod, Makefile,
-goreleaser, install.sh, buildinfo and imports. Replace it only via
-`scripts/set-org.sh`, never piecemeal.
+The GitHub owner `sezznaw` is baked into go.mod, Makefile, goreleaser,
+install.sh, buildinfo and every import. It is the real owner, not a
+placeholder. `scripts/set-org.sh <owner>` exists only for someone forking the
+project; never change the owner piecemeal.
+
+State as of 2026-09-19: public on GitHub, releases `v0.1.0` and `v0.1.1`
+published, and the whole chain (curl installer, `ngs` against the live
+registry, `go get` of devkit-common through proxy.golang.org, `self-update`)
+was verified against the real GitHub. `v0.1.0` shipped with the git-identity
+bug below; `v0.1.1` is the first good release.
 
 ## Commands
 
@@ -46,11 +55,24 @@ cd order && devkit update --check
 ```
 
 Release is CI-only: pushing a `vX.Y.Z` tag runs goreleaser via
-`.github/workflows/release.yml`, which creates a GitHub Release. `install.sh`
-and `self-update` download its assets through the releases API (asset `url`
-with `Accept: application/octet-stream`, which also works for private repos),
-so the asset names in `.goreleaser.yaml` (`devkit_<os>_<arch>.tar.gz` +
-`checksums.txt`) are a contract shared by three places.
+`.github/workflows/release.yml`, which creates a GitHub Release. The asset
+names in `.goreleaser.yaml` (`devkit_<os>_<arch>.tar.gz` + `checksums.txt`)
+are a contract shared by three places:
+- `install.sh` without a token uses no API at all: it resolves the tag from
+  the `releases/latest` redirect and downloads `releases/download/<tag>/<asset>`
+  (the anonymous API allows only 60 requests/hour per IP). With `GITHUB_TOKEN`
+  (private repos) it reads the release JSON and finds asset ids with awk.
+- `self-update` always uses the releases API (asset `url` with
+  `Accept: application/octet-stream`).
+
+Release rules learned the hard way:
+- The release workflow does not run tests. Wait for the `ci` workflow to be
+  green on the commit before pushing a tag; `v0.1.0` was tagged on a red commit.
+- Never move or re-push a release tag. Fix forward with the next patch version.
+- Test `install.sh` against the live release after publishing (scratch
+  `HOME` and `INSTALL_DIR`); fake-server tests did not catch the real API's
+  JSON shape. The `releases/latest` redirect can lag a few seconds behind a
+  new release.
 
 ## Architecture
 
@@ -85,7 +107,7 @@ in `component.json` are also rendered as templates.
 **manifest** (`<project>/.devkit/manifest.json`) records per component the
 version, the vars given at install time (reused by `update`), its deps, and a
 `sha256` per written file. The hash is always of the *template output*, not of
-what is on disk. That is what lets `list`/`update` classify a file as
+what is on disk. That is what lets `update` / `update --check` classify a file as
 Unchanged / Modified / Missing, and why a file skipped during update keeps
 showing as modified until the user merges it.
 
@@ -120,6 +142,9 @@ directory with `--set Service/Module` (user vars override built-ins for this
 reason), renders the component's `idl/` tree into `<workspace>/idl/` via
 `render.BuildFrom`, then runs the deferred `post_install` hooks
 (`Installer.RunHooks`) so codegen sees the IDL, and finally `git init`s.
+`workspace.InitRepo` falls back to a neutral committer identity when git has
+no `user.name`/`user.email` (new laptops, CI runners); without that the
+scaffold commit silently fails.
 
 **Project directory.** `<project>/devkit.yaml` (`workspace.Config`) carries
 the per-project settings (module_prefix, idl_repo, common_repo, component,
@@ -171,4 +196,8 @@ download and takes several minutes; use `DEVKIT_PLAIN=1` for readable logs.
 - The registry format and publishing steps are documented in
   `docs/registry.md`; update it when changing `component.json` fields or
   template behaviour, since component authors read it, not the Go code.
-- Commit style: `feat:`/`fix:` prefixes; each delivered step so far is one commit.
+- Commit style: `feat:`/`fix:` prefixes, one commit per delivered step. The
+  pre-publication history was squashed into a single initial commit on
+  2026-09-19; history from there on is public and must not be rewritten.
+- Docs come in pairs: `README.md` and `README.zh-CN.md` have identical
+  structure; change both together.

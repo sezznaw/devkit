@@ -1,5 +1,6 @@
 #!/bin/sh
-# Replace the placeholder GitHub organisation "sezznaw" across the repository.
+# For forks: replace the GitHub owner "sezznaw" across the repository
+# (module path, install.sh, release config, default registry, docs).
 #
 #   scripts/set-org.sh <github-org-or-user>
 #   scripts/set-org.sh acme-inc

@@ -160,4 +160,6 @@ make build && make test && make lint
 export DEVKIT_REGISTRY_DIR=$PWD/../devkit-registry    # 使用本地模板
 ```
 
-推送 `vX.Y.Z` tag：GitHub Actions 运行 goreleaser，发布 `devkit_<os>_<arch>.tar.gz` 和 `checksums.txt`，`install.sh` 和 `self-update` 都从那里下载。源码中使用占位组织名 `sezznaw`，用 `scripts/set-org.sh <你的GitHub组织名>` 一次性替换。
+推送 `vX.Y.Z` tag：GitHub Actions 运行 goreleaser，发布 `devkit_<os>_<arch>.tar.gz` 和 `checksums.txt`，`install.sh` 和 `self-update` 都从那里下载。打 tag 之前请等该提交的 `ci` 工作流通过，发布工作流本身不跑测试。
+
+如果要 fork：GitHub 所有者 `sezznaw` 出现在 module 路径、`install.sh`、发布配置和默认 registry 里，`scripts/set-org.sh <你的GitHub用户名或组织名>` 可以一次性全部改掉。

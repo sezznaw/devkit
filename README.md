@@ -188,5 +188,9 @@ export DEVKIT_REGISTRY_DIR=$PWD/../devkit-registry    # use local templates
 
 Push a tag `vX.Y.Z`: GitHub Actions runs goreleaser and publishes
 `devkit_<os>_<arch>.tar.gz` plus `checksums.txt`, which `install.sh` and
-`self-update` download. The sources use the placeholder organisation
-`sezznaw`; replace it once with `scripts/set-org.sh <your-github-org>`.
+`self-update` download. Wait for the `ci` workflow to pass on the commit
+before tagging; the release workflow does not run tests.
+
+Forking: the GitHub owner `sezznaw` appears in the module path, `install.sh`,
+the release configuration and the default registry. `scripts/set-org.sh
+<your-github-owner>` rewrites all of them.
