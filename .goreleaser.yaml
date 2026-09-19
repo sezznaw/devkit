@@ -1,0 +1,44 @@
+# goreleaser configuration. Runs in GitHub Actions on every v* tag
+# (.github/workflows/release.yml) and publishes a GitHub Release with
+# devkit_<os>_<arch>.tar.gz + checksums.txt, which install.sh and
+# `devkit self-update` download.
+version: 2
+
+project_name: devkit
+
+before:
+  hooks:
+    - go mod tidy
+
+builds:
+  - main: .
+    binary: devkit
+    env:
+      - CGO_ENABLED=0
+    goos: [linux, darwin]
+    goarch: [amd64, arm64]
+    ldflags:
+      - -s -w
+      - -X github.com/sezznaw/devkit/internal/buildinfo.Version={{.Version}}
+      - -X github.com/sezznaw/devkit/internal/buildinfo.Commit={{.ShortCommit}}
+      - -X github.com/sezznaw/devkit/internal/buildinfo.Date={{.Date}}
+      - -X github.com/sezznaw/devkit/internal/buildinfo.Repo=sezznaw/devkit
+
+archives:
+  - formats: [tar.gz]
+    name_template: "{{ .ProjectName }}_{{ .Os }}_{{ .Arch }}"
+
+checksum:
+  name_template: checksums.txt
+
+release:
+  github:
+    owner: sezznaw
+    name: devkit
+
+changelog:
+  sort: asc
+  filters:
+    exclude:
+      - "^docs:"
+      - "^chore:"

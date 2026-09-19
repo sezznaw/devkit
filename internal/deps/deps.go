@@ -1,0 +1,391 @@
+// Package deps checks the tools a Kitex service needs (git, Go, kitex,
+// thriftgo) and installs the missing ones, so that `devkit ngs` works on a
+// fresh machine right after install.sh.
+//
+// Where things go:
+//
+//	~/.devkit/go        a Go toolchain downloaded from go.dev (only if none is present)
+//	$(go env GOPATH)/bin kitex and thriftgo via `go install`
+//	~/.devkit/env       shell snippet that puts both on PATH; sourced from ~/.zshrc etc.
+//
+// The current process's PATH is extended too, so hooks run later in the same
+// devkit invocation find the tools without a shell restart.
+package deps
+
+import (
+	"context"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"io"
+	"net/http"
+	"os"
+	"os/exec"
+	"path/filepath"
+	"regexp"
+	"runtime"
+	"strconv"
+	"strings"
+	"time"
+)
+
+// Defaults when the component does not pin versions.
+const (
+	DefaultKitexVersion    = "v0.16.3"
+	DefaultThriftgoVersion = "v0.4.5"
+	MinGoMinor             = 21 // Go >= 1.21 can auto-download newer toolchains required by go.mod
+)
+
+// Reporter receives progress from Ensure.
+type Reporter interface {
+	Log(format string, args ...any)
+	Writer() io.Writer
+	Progress(r io.Reader, total int64, label string) io.Reader
+}
+
+// Want lists the required tool versions.
+type Want struct {
+	KitexVersion    string
+	ThriftgoVersion string
+}
+
+// Status of one tool.
+type Status struct {
+	Name      string
+	Version   string
+	Path      string
+	Installed bool // installed by this run
+	Missing   bool
+	Hint      string
+}
+
+// Check reports the state of every tool without installing anything. Tool
+// directories devkit manages (~/.devkit/go/bin, GOPATH/bin) are consulted even
+// if the shell PATH does not include them yet.
+func Check(ctx context.Context, want Want) []Status {
+	prependPath(devkitGoBin())
+	prependPath(goPathBin(ctx))
+	return []Status{gitStatus(ctx), goStatus(ctx), toolStatus(ctx, "kitex", "-version"), toolStatus(ctx, "thriftgo", "--version")}
+}
+
+// Ensure installs whatever is missing. It returns the final statuses and an
+// error if a required tool could not be provided.
+func Ensure(ctx context.Context, want Want, rep Reporter) ([]Status, error) {
+	if want.KitexVersion == "" {
+		want.KitexVersion = DefaultKitexVersion
+	}
+	if want.ThriftgoVersion == "" {
+		want.ThriftgoVersion = DefaultThriftgoVersion
+	}
+	prependPath(devkitGoBin())
+	if gp := goPathBin(ctx); gp != "" {
+		prependPath(gp)
+	}
+
+	git := gitStatus(ctx)
+	if git.Missing {
+		return nil, errors.New("git is not installed. " + git.Hint)
+	}
+	rep.Log("git %s", git.Version)
+
+	g := goStatus(ctx)
+	if g.Missing {
+		if err := installGo(ctx, rep); err != nil {
+			return nil, fmt.Errorf("install Go: %w", err)
+		}
+		g = goStatus(ctx)
+		if g.Missing {
+			return nil, errors.New("Go was downloaded but `go version` still fails; check " + devkitGoBin())
+		}
+		g.Installed = true
+	}
+	rep.Log("go %s%s", g.Version, installedTag(g))
+	if gp := goPathBin(ctx); gp != "" {
+		prependPath(gp)
+	}
+
+	var out []Status
+	out = append(out, git, g)
+	for _, tool := range []struct{ name, flag, pkg, version string }{
+		{"kitex", "-version", "github.com/cloudwego/kitex/tool/cmd/kitex", want.KitexVersion},
+		{"thriftgo", "--version", "github.com/cloudwego/thriftgo", want.ThriftgoVersion},
+	} {
+		st := toolStatus(ctx, tool.name, tool.flag)
+		if st.Missing {
+			if err := goInstall(ctx, rep, tool.pkg, tool.version); err != nil {
+				return nil, fmt.Errorf("install %s: %w", tool.name, err)
+			}
+			prependPath(goPathBin(ctx)) // GOPATH/bin may not have existed before the first install
+			st = toolStatus(ctx, tool.name, tool.flag)
+			if st.Missing {
+				return nil, fmt.Errorf("%s was installed but is not on PATH; add %s to PATH", tool.name, goPathBin(ctx))
+			}
+			st.Installed = true
+		}
+		rep.Log("%s %s%s", tool.name, st.Version, installedTag(st))
+		out = append(out, st)
+	}
+
+	if err := writeEnvFile(ctx); err != nil {
+		rep.Log("warning: could not write %s: %v", envFile(), err)
+	}
+	return out, nil
+}
+
+func installedTag(s Status) string {
+	if s.Installed {
+		return " (installed now)"
+	}
+	return ""
+}
+
+// ---- individual tools ----
+
+func gitStatus(ctx context.Context) Status {
+	st := Status{Name: "git"}
+	p, err := exec.LookPath("git")
+	if err != nil {
+		st.Missing = true
+		switch runtime.GOOS {
+		case "darwin":
+			st.Hint = "run `xcode-select --install` or `brew install git`, then retry."
+		default:
+			st.Hint = "install it with your package manager (apt install git / yum install git), then retry."
+		}
+		return st
+	}
+	st.Path = p
+	out, _ := exec.CommandContext(ctx, "git", "--version").Output()
+	st.Version = strings.TrimPrefix(strings.TrimSpace(string(out)), "git version ")
+	return st
+}
+
+var goVersionRe = regexp.MustCompile(`go(\d+)\.(\d+)`)
+
+func goStatus(ctx context.Context) Status {
+	st := Status{Name: "go"}
+	p, err := exec.LookPath("go")
+	if err != nil {
+		st.Missing = true
+		return st
+	}
+	out, err := exec.CommandContext(ctx, "go", "version").Output()
+	if err != nil {
+		st.Missing = true
+		return st
+	}
+	st.Path = p
+	m := goVersionRe.FindStringSubmatch(string(out))
+	if m == nil {
+		st.Missing = true
+		return st
+	}
+	st.Version = m[0][2:]
+	minor, _ := strconv.Atoi(m[2])
+	if m[1] == "1" && minor < MinGoMinor {
+		st.Missing = true
+		st.Hint = fmt.Sprintf("Go %s is too old (need 1.%d+)", st.Version, MinGoMinor)
+	}
+	return st
+}
+
+func toolStatus(ctx context.Context, name, versionFlag string) Status {
+	st := Status{Name: name}
+	p, err := exec.LookPath(name)
+	if err != nil {
+		st.Missing = true
+		return st
+	}
+	st.Path = p
+	out, _ := exec.CommandContext(ctx, name, versionFlag).CombinedOutput()
+	if f := strings.Fields(string(out)); len(f) > 0 {
+		st.Version = f[len(f)-1]
+	}
+	return st
+}
+
+// ---- installers ----
+
+func goInstall(ctx context.Context, rep Reporter, pkg, version string) error {
+	rep.Log("installing %s@%s (go install)", pkg, version)
+	cmd := exec.CommandContext(ctx, "go", "install", pkg+"@"+version)
+	cmd.Stdout = rep.Writer()
+	cmd.Stderr = rep.Writer()
+	cmd.Env = os.Environ()
+	return cmd.Run()
+}
+
+type goRelease struct {
+	Version string `json:"version"`
+	Stable  bool   `json:"stable"`
+	Files   []struct {
+		Filename string `json:"filename"`
+		OS       string `json:"os"`
+		Arch     string `json:"arch"`
+		Kind     string `json:"kind"`
+		Size     int64  `json:"size"`
+	} `json:"files"`
+}
+
+// installGo downloads the latest stable toolchain from go.dev into ~/.devkit/go.
+func installGo(ctx context.Context, rep Reporter) error {
+	rep.Log("Go not found, downloading the latest release from go.dev")
+	client := &http.Client{Timeout: 15 * time.Minute}
+	req, _ := http.NewRequestWithContext(ctx, http.MethodGet, "https://go.dev/dl/?mode=json", nil)
+	resp, err := client.Do(req)
+	if err != nil {
+		return err
+	}
+	var rels []goRelease
+	err = json.NewDecoder(resp.Body).Decode(&rels)
+	resp.Body.Close()
+	if err != nil {
+		return err
+	}
+	var filename string
+	var size int64
+	var version string
+	for _, r := range rels {
+		if !r.Stable {
+			continue
+		}
+		for _, f := range r.Files {
+			if f.OS == runtime.GOOS && f.Arch == runtime.GOARCH && f.Kind == "archive" {
+				filename, size, version = f.Filename, f.Size, r.Version
+				break
+			}
+		}
+		if filename != "" {
+			break
+		}
+	}
+	if filename == "" {
+		return fmt.Errorf("no Go archive for %s/%s on go.dev", runtime.GOOS, runtime.GOARCH)
+	}
+
+	req, _ = http.NewRequestWithContext(ctx, http.MethodGet, "https://go.dev/dl/"+filename, nil)
+	resp, err = client.Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("download %s: %s", filename, resp.Status)
+	}
+	root, err := devkitDir()
+	if err != nil {
+		return err
+	}
+	tmp, err := os.CreateTemp(root, "go-*.tar.gz")
+	if err != nil {
+		return err
+	}
+	defer os.Remove(tmp.Name())
+	if _, err := io.Copy(tmp, rep.Progress(resp.Body, size, filename)); err != nil {
+		tmp.Close()
+		return err
+	}
+	tmp.Close()
+
+	dest := filepath.Join(root, "go")
+	os.RemoveAll(dest)
+	rep.Log("extracting %s to %s", version, dest)
+	// The archive contains a top-level "go/" directory; extract into ~/.devkit.
+	cmd := exec.CommandContext(ctx, "tar", "-xzf", tmp.Name(), "-C", root)
+	cmd.Stderr = rep.Writer()
+	if err := cmd.Run(); err != nil {
+		return err
+	}
+	prependPath(filepath.Join(dest, "bin"))
+	return nil
+}
+
+// ---- paths and env ----
+
+func devkitDir() (string, error) {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return "", err
+	}
+	dir := filepath.Join(home, ".devkit")
+	return dir, os.MkdirAll(dir, 0o755)
+}
+
+func devkitGoBin() string {
+	home, _ := os.UserHomeDir()
+	return filepath.Join(home, ".devkit", "go", "bin")
+}
+
+func goPathBin(ctx context.Context) string {
+	if v := os.Getenv("GOBIN"); v != "" {
+		return v
+	}
+	out, err := exec.CommandContext(ctx, "go", "env", "GOPATH").Output()
+	if err != nil {
+		return ""
+	}
+	gp := strings.TrimSpace(string(out))
+	if gp == "" {
+		return ""
+	}
+	return filepath.Join(strings.Split(gp, string(os.PathListSeparator))[0], "bin")
+}
+
+func prependPath(dir string) {
+	if dir == "" {
+		return
+	}
+	if _, err := os.Stat(dir); err != nil {
+		return
+	}
+	cur := os.Getenv("PATH")
+	for _, p := range strings.Split(cur, string(os.PathListSeparator)) {
+		if p == dir {
+			return
+		}
+	}
+	os.Setenv("PATH", dir+string(os.PathListSeparator)+cur)
+}
+
+// envFile is ~/.devkit/env, a sourceable snippet like ~/.cargo/env.
+func envFile() string {
+	home, _ := os.UserHomeDir()
+	return filepath.Join(home, ".devkit", "env")
+}
+
+// EnvFile returns the path of the shell snippet.
+func EnvFile() string { return envFile() }
+
+func writeEnvFile(ctx context.Context) error {
+	var dirs []string
+	if _, err := os.Stat(devkitGoBin()); err == nil {
+		dirs = append(dirs, `"$HOME/.devkit/go/bin"`)
+	}
+	if gp := goPathBin(ctx); gp != "" {
+		home, _ := os.UserHomeDir()
+		if strings.HasPrefix(gp, home) {
+			gp = `"$HOME` + strings.TrimPrefix(gp, home) + `"`
+		} else {
+			gp = `"` + gp + `"`
+		}
+		dirs = append(dirs, gp)
+	}
+	if len(dirs) == 0 {
+		return nil
+	}
+	content := "# devkit: tools installed for you. Source this file from your shell profile:\n" +
+		"#   echo 'source \"$HOME/.devkit/env\"' >> ~/.zshrc\n" +
+		"export PATH=" + strings.Join(dirs, ":") + ":\"$PATH\"\n"
+	return os.WriteFile(envFile(), []byte(content), 0o644)
+}
+
+// PathHint returns a message telling the user how to make the tools available
+// in new shells, or "" if nothing needs to be done.
+func PathHint(statuses []Status) string {
+	for _, s := range statuses {
+		if s.Installed {
+			return fmt.Sprintf("tools were installed for you; add them to new shells with:\n    echo 'source \"$HOME/.devkit/env\"' >> ~/.zshrc   # or ~/.bashrc")
+		}
+	}
+	return ""
+}
