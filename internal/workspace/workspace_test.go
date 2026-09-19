@@ -5,6 +5,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -48,8 +49,8 @@ func TestEnsureRepoCloneThenPull(t *testing.T) {
 	if _, err := git(ctx, src, "", "add", "-A"); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := git(ctx, src, "", "commit", "-q", "-m", "b"); err != nil {
-		t.Fatal(err)
+	if out, err := git(ctx, src, "", "-c", "user.name=t", "-c", "user.email=t@example.com", "commit", "-q", "-m", "b"); err != nil {
+		t.Fatalf("%v: %s", err, out)
 	}
 	if err := EnsureRepo(ctx, dst, src, "", quiet); err != nil {
 		t.Fatal(err)
@@ -71,5 +72,40 @@ func TestOrgPattern(t *testing.T) {
 	}
 	if got := RepoURL("ghe.corp.com", "a/b"); got != "https://ghe.corp.com/a/b.git" {
 		t.Fatalf("enterprise host: %s", got)
+	}
+}
+
+// A machine without git identity (new laptop, CI runner) must still get the scaffold commit.
+func TestInitRepoWithoutGitIdentity(t *testing.T) {
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("git not installed")
+	}
+	// Hide every source of identity: global/system config and env.
+	t.Setenv("HOME", t.TempDir())
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	t.Setenv("GIT_CONFIG_NOSYSTEM", "1")
+	t.Setenv("GIT_CONFIG_GLOBAL", "/dev/null")
+	for _, k := range []string{"GIT_AUTHOR_NAME", "GIT_AUTHOR_EMAIL", "GIT_COMMITTER_NAME", "GIT_COMMITTER_EMAIL", "EMAIL"} {
+		// Unset, not empty: an empty GIT_AUTHOR_NAME is an explicit (invalid) identity.
+		if v, ok := os.LookupEnv(k); ok {
+			os.Unsetenv(k)
+			t.Cleanup(func() { os.Setenv(k, v) })
+		}
+	}
+	ctx := context.Background()
+	dir := t.TempDir()
+	os.WriteFile(filepath.Join(dir, "a.txt"), []byte("a"), 0o644)
+	if hasIdentity(ctx, dir) {
+		t.Skip("could not isolate git identity on this machine")
+	}
+	if err := InitRepo(ctx, dir, "scaffold"); err != nil {
+		t.Fatalf("InitRepo must succeed without a configured identity: %v", err)
+	}
+	out, err := git(ctx, dir, "", "log", "--format=%an <%ae> %s")
+	if err != nil || out == "" {
+		t.Fatalf("no commit created: %v %q", err, out)
+	}
+	if want := "devkit <devkit@users.noreply.github.com> scaffold"; !strings.Contains(out, want) {
+		t.Errorf("log = %q, want it to contain %q", out, want)
 	}
 }

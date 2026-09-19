@@ -90,17 +90,31 @@ func InitRepo(ctx context.Context, dir, message string) error {
 	if _, err := os.Stat(filepath.Join(dir, ".git")); err == nil {
 		return nil
 	}
+	commit := []string{"commit", "--quiet", "-m", message}
+	if !hasIdentity(ctx, dir) {
+		// A fresh machine (or a CI runner) has no user.name / user.email yet and
+		// git refuses to commit. Use a neutral identity for this one scaffold
+		// commit instead of failing; the developer's later commits use their own.
+		commit = append([]string{"-c", "user.name=devkit", "-c", "user.email=devkit@users.noreply.github.com"}, commit...)
+	}
 	steps := [][]string{
 		{"init", "--quiet", "-b", "main"},
 		{"add", "-A"},
-		{"commit", "--quiet", "-m", message},
+		commit,
 	}
 	for _, s := range steps {
 		if out, err := git(ctx, dir, "", s...); err != nil {
-			return fmt.Errorf("git %s: %w\n%s", s[0], err, strings.TrimSpace(out))
+			return fmt.Errorf("git %s: %w\n%s", strings.Join(s, " "), err, strings.TrimSpace(out))
 		}
 	}
 	return nil
+}
+
+// hasIdentity reports whether git knows who the committer is.
+func hasIdentity(ctx context.Context, dir string) bool {
+	name, _ := git(ctx, dir, "", "config", "user.name")
+	email, _ := git(ctx, dir, "", "config", "user.email")
+	return strings.TrimSpace(name) != "" && strings.TrimSpace(email) != ""
 }
 
 // EnsureGoPrivate makes sure `go env GOPRIVATE` covers pattern (e.g.
