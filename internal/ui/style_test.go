@@ -2,6 +2,7 @@ package ui
 
 import (
 	"bytes"
+	"io"
 	"strings"
 	"testing"
 )
@@ -89,5 +90,22 @@ func TestStepResultIsColouredOnlyWhenEnabled(t *testing.T) {
 	r.Step("plain", func(s *Step) error { s.Log("+ file"); return nil })
 	if strings.Contains(buf.String(), "\033") {
 		t.Errorf("writing to a non-terminal must not emit escapes: %q", buf.String())
+	}
+}
+
+func TestLineWriterDimsSubprocessOutputAndKeepsMarkers(t *testing.T) {
+	var buf bytes.Buffer
+	lw := &lineWriter{w: &buf, st: Styler{on: true}}
+	lw.Write([]byte("$ go mod tidy\ngo: upgraded x v1 => v2\nwarning: slow"))
+	lw.Write([]byte(" network\n"))
+	got := strings.Split(strings.TrimRight(buf.String(), "\n"), "\n")
+	want := []string{"\033[2m$ go mod tidy\033[0m", "\033[2mgo: upgraded x v1 => v2\033[0m", "\033[33mwarning: slow network\033[0m"}
+	if len(got) != 3 || got[0] != want[0] || got[1] != want[1] || got[2] != want[2] {
+		t.Fatalf("got %q\nwant %q", got, want)
+	}
+	// Colour off: the writer must be the original one, byte for byte.
+	var plain bytes.Buffer
+	if w := LineWriter(&plain); w != io.Writer(&plain) {
+		t.Error("with colour off LineWriter must return the writer unchanged")
 	}
 }

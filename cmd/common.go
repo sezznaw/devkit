@@ -45,6 +45,8 @@ func newInstallerAt(root string, force, skipHooks bool) (*installer.Installer, e
 		Force:     force,
 		SkipHooks: skipHooks,
 		Log:       logf,
+		// Hook output (go get, go mod tidy, ...) is secondary: dim it.
+		Output: ui.LineWriter(os.Stdout),
 	}, nil
 }
 

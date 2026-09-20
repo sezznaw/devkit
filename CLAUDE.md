@@ -200,7 +200,18 @@ work on a blank machine: it checks git (never installed, only hinted), Go
 toolchains required by go.mod are auto-fetched by Go itself), and
 kitex/thriftgo (`go install` at the versions the component's vars pin). It
 prepends the tool dirs to the current process PATH so later hooks find them,
-and writes `~/.devkit/env` (rustup-style) for future shells. `internal/ui`
+and writes `~/.devkit/env` (rustup-style) for future shells. Colour lives in
+`internal/ui/style.go`: a `Styler` per stream (`ui.Stdout`, `ui.Stderr`, off
+unless that stream is a terminal; `NO_COLOR`, `TERM=dumb`, `CI`,
+`DEVKIT_PLAIN` disable, `CLICOLOR_FORCE=1` forces). `Styler.Line` colours a
+progress line by its leading marker (`+ - ! ~ = $`, `warning:`), so the
+installer and hooks never deal with terminals; `ui.LineWriter` does the same
+for streamed subprocess output and dims the rest; `ui.Table` lays out before
+styling because `text/tabwriter` counts escape bytes as width. Meaning is
+fixed: green success, red failure, yellow "needs attention", bold headings,
+dim secondary. To see colours from a tool shell, run the binary under a
+pseudo-terminal created with Python's `pty.fork()`; `script` does not work
+there. `internal/ui`
 renders numbered steps: spinner + ✓/✗ + duration on a TTY, plain lines when
 `CI`/`DEVKIT_PLAIN`/non-TTY; `Step.Writer()` indents subprocess output and
 `Step.Progress()` draws download bars. `ngs` is written as seven `r.Step`

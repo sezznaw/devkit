@@ -99,10 +99,49 @@ func (s Styler) Line(line string) string {
 		return indent + s.Yellow(trimmed)
 	case strings.HasPrefix(trimmed, "updating "), strings.HasPrefix(trimmed, "installing "), strings.HasPrefix(trimmed, "removing "):
 		return indent + s.Bold(trimmed)
+	case strings.Contains(trimmed, "were modified locally and not updated"):
+		return indent + s.Yellow(trimmed)
+	case strings.HasPrefix(trimmed, "running ") && strings.HasSuffix(trimmed, " hooks"):
+		return indent + s.Dim(trimmed)
 	case strings.HasSuffix(trimmed, "(installed now)"):
 		return indent + strings.TrimSuffix(trimmed, "(installed now)") + s.Green("(installed now)")
 	}
 	return line
+}
+
+// LineWriter styles text streamed from a subprocess line by line: lines with a
+// known marker get its colour, everything else is dimmed as secondary detail.
+// With colour off it passes the bytes through untouched.
+func LineWriter(w io.Writer) io.Writer {
+	st := For(w)
+	if !st.on {
+		return w
+	}
+	return &lineWriter{w: w, st: st}
+}
+
+type lineWriter struct {
+	w   io.Writer
+	st  Styler
+	buf []byte
+}
+
+func (l *lineWriter) Write(p []byte) (int, error) {
+	l.buf = append(l.buf, p...)
+	for {
+		i := strings.IndexByte(string(l.buf), '\n')
+		if i < 0 {
+			break
+		}
+		line := strings.TrimRight(string(l.buf[:i]), "\r")
+		l.buf = l.buf[i+1:]
+		if styled := l.st.Line(line); styled != line {
+			fmt.Fprintln(l.w, styled)
+		} else {
+			fmt.Fprintln(l.w, l.st.Dim(line))
+		}
+	}
+	return len(p), nil
 }
 
 // Cell is one table cell; Style is applied after the layout is computed, so

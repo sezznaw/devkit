@@ -132,6 +132,8 @@ echo 'source "$HOME/.devkit/env"' >> ~/.zshrc    # 或 ~/.bashrc
 | `devkit doctor` | 查看 git、Go、kitex、thriftgo 的状态。`--fix` 安装缺失的工具 |
 | `devkit version` | 报问题时提供版本信息 |
 
+**颜色。** 在终端里 devkit 用颜色标出重点：绿色表示成功，红色表示失败，黄色表示需要你留意的内容（被跳过的文件、有新版本、需要手动处理的事项），加粗是标题，灰色是次要信息（例如 `go mod tidy` 的输出）。输出被重定向、在 CI 里或设置了 `DEVKIT_PLAIN=1` 时是纯文本；`NO_COLOR=1` 只去掉颜色；`CLICOLOR_FORCE=1` 在管道里也保留颜色，比如配合 `less -R`。
+
 常用的 `ngs` 参数：`--set Port=9000`（模板变量）、`--module <路径>`（覆盖 module 路径）、`--skip-common`、`--skip-idl`、`--no-git`。
 
 ### 一次更新全部服务

@@ -157,6 +157,13 @@ echo 'source "$HOME/.devkit/env"' >> ~/.zshrc    # or ~/.bashrc
 | `devkit doctor` | show the state of git, Go, kitex, thriftgo. `--fix` installs what is missing |
 | `devkit version` | version info for bug reports |
 
+**Colours.** On a terminal devkit marks where to look: green for success,
+red for failure, yellow for what needs your attention (skipped files, newer
+versions, things to do by hand), bold for headings, dim for secondary detail
+such as `go mod tidy` output. Redirected output, CI and `DEVKIT_PLAIN=1` get
+plain text; `NO_COLOR=1` removes only the colours; `CLICOLOR_FORCE=1` keeps
+them when piping, e.g. into `less -R`.
+
 Useful `ngs` flags: `--set Port=9000` (template variable), `--module <path>`
 (override the module path), `--skip-common`, `--skip-idl`, `--no-git`.
 

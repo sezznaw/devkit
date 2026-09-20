@@ -164,11 +164,18 @@ func printNotes(notes []registry.ChangeEntry) {
 				fmt.Println("\n" + st.Attention("your own files are never rewritten; you may want to:"))
 				first = false
 			}
-			for i, line := range strings.Split(a, "\n") {
-				if i == 0 {
+			lines := strings.Split(a, "\n")
+			// "Do this:" followed by lines is a snippet to copy, worth bold.
+			// Anything else that wraps is just a long sentence.
+			snippet := strings.HasSuffix(strings.TrimSpace(lines[0]), ":")
+			for i, line := range lines {
+				switch {
+				case i == 0:
 					fmt.Printf("  %s %s %s\n", st.Yellow("*"), st.Cyan("["+e.Version+"]"), line)
-				} else {
-					fmt.Printf("      %s\n", st.Bold(line)) // the snippet to copy
+				case snippet:
+					fmt.Printf("      %s\n", st.Bold(line))
+				default:
+					fmt.Printf("      %s\n", line)
 				}
 			}
 		}
