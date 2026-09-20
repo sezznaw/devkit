@@ -11,6 +11,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/sezznaw/devkit/internal/config"
 	"github.com/sezznaw/devkit/internal/installer"
 	"github.com/sezznaw/devkit/internal/manifest"
 	"github.com/sezznaw/devkit/internal/project"
@@ -98,6 +99,8 @@ Files you own (go.mod, idl.mk, conf/, handler/) are never touched.`,
 				failed = append(failed, name)
 			}
 		}
+		// Whatever the scope, the project's common/ and go.work follow the team.
+		syncAfterUpdate(cmd, roots, single)
 		if single {
 			printNotes(notes)
 			return nil
@@ -183,6 +186,45 @@ func printNotes(notes []registry.ChangeEntry) {
 	if !first {
 		fmt.Println("\n" + st.Dim("every setting is documented in conf/README.md of each service."))
 	}
+}
+
+// projectOf returns the project directory the services live in.
+func projectOf(roots []string, single bool) string {
+	if len(roots) == 0 {
+		return ""
+	}
+	if dir := workspace.Find(roots[0]); dir != "" {
+		return dir
+	}
+	return filepath.Dir(roots[0])
+}
+
+func teamFor(cmd *cobra.Command, root string) (teamValues, bool) {
+	in, err := newInstallerAt(root, false, true)
+	if err != nil {
+		return teamValues{}, false
+	}
+	for _, name := range in.Manifest.Names() {
+		if comp, err := in.Latest(cmd.Context(), name); err == nil {
+			if t := teamValuesOf(comp); t.CommonVersion != "" {
+				return t, true
+			}
+		}
+	}
+	return teamValues{}, false
+}
+
+func syncAfterUpdate(cmd *cobra.Command, roots []string, single bool) {
+	project := projectOf(roots, single)
+	team, ok := teamFor(cmd, roots[0])
+	cfg, err := config.Load()
+	if project == "" || !ok || err != nil {
+		return
+	}
+	if _, statErr := os.Stat(filepath.Join(project, "common")); statErr != nil {
+		team.CommonVersion = "" // this project opted out of the checkout (--skip-common)
+	}
+	syncProject(cmd.Context(), cfg, project, team, false, logf)
 }
 
 // updateScope returns the services to operate on. single is true when the
@@ -348,6 +390,22 @@ func printStatus(cmd *cobra.Command, roots []string, single bool) error {
 		return nil
 	}
 	ui.Table(os.Stdout, rows)
+
+	// The common library checkout the IDE navigates into.
+	project := projectOf(roots, single)
+	if _, err := os.Stat(filepath.Join(project, "common", ".git")); err == nil {
+		if team, ok := teamFor(cmd, roots[0]); ok {
+			c := workspace.CommonStatus(cmd.Context(), filepath.Join(project, "common"), team.CommonVersion)
+			switch {
+			case c.Dirty:
+				fmt.Printf("\n%s %s, %s\n", st.Bold("common/"), c.Version, st.Attention("has local changes: builds here use them, CI does not (team: "+c.Want+")"))
+			case c.Version != c.Want:
+				fmt.Printf("\n%s %s\n", st.Bold("common/"), st.Attention(c.Version+" (team: "+c.Want+"); run `devkit update`"))
+			default:
+				fmt.Printf("\n%s %s\n", st.Bold("common/"), st.Green(c.Version+" (team version)"))
+			}
+		}
+	}
 	return nil
 }
 

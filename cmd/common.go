@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -12,6 +13,7 @@ import (
 	"github.com/sezznaw/devkit/internal/project"
 	"github.com/sezznaw/devkit/internal/registry"
 	"github.com/sezznaw/devkit/internal/ui"
+	"github.com/sezznaw/devkit/internal/workspace"
 )
 
 // newInstaller locates the service the current directory belongs to and loads
@@ -49,6 +51,65 @@ func newInstallerAt(root string, force, skipHooks bool) (*installer.Installer, e
 		Output: ui.LineWriter(os.Stdout),
 	}, nil
 }
+
+// teamValues are the template-decided values the project directory depends on.
+type teamValues struct {
+	CommonVersion string
+	GoVersion     string
+}
+
+func teamValuesOf(comp *registry.Component) teamValues {
+	var t teamValues
+	if v := comp.VarByName("CommonVersion"); v != nil {
+		t.CommonVersion = v.Default
+	}
+	if v := comp.VarByName("GoVersion"); v != nil {
+		t.GoVersion = v.Default
+	}
+	return t
+}
+
+// syncProject keeps the two things in the project directory that make the
+// common library part of "our code": common/ checked out at the team's
+// version, and a go.work that points the Go tools and the IDE at it. Problems
+// here are reported, never fatal: the services build without either.
+func syncProject(ctx context.Context, cfg *config.Config, project string, team teamValues, skipCommon bool, log func(string, ...any)) *workspace.CommonState {
+	var state *workspace.CommonState
+	if !skipCommon && team.CommonVersion != "" {
+		ws, _ := workspace.LoadConfig(project)
+		repo := workspace.DefaultCommonRepo
+		if ws != nil {
+			repo = firstNonEmpty(ws.CommonRepo, cfg.CommonRepo, workspace.DefaultCommonRepo)
+		}
+		st, err := workspace.SyncCommon(ctx, filepath.Join(project, "common"), workspace.RepoURL(cfg.GitHubHost, repo), team.CommonVersion, cfg.GitHubToken, cfg.GitHubHost, log)
+		if err != nil {
+			log("warning: %v", err)
+		} else {
+			state = &st
+			if st.Dirty {
+				log("warning: common/ has local changes, so it was left at %s. Builds on this machine use those changes; CI and everyone else use %s", st.Version, st.Want)
+			}
+		}
+	}
+	if team.GoVersion != "" {
+		services, _ := project2Services(project)
+		goLine := team.GoVersion
+		if strings.Count(goLine, ".") == 1 {
+			goLine += ".0"
+		}
+		changed, err := workspace.SyncGoWork(project, goLine, services)
+		switch {
+		case err != nil:
+			log("warning: %v", err)
+		case changed:
+			log("go.work updated: \"go to definition\" on the common library opens common/")
+		}
+	}
+	return state
+}
+
+// project2Services lists the services of a project directory.
+func project2Services(dir string) ([]string, error) { return project.Services(dir) }
 
 func parseSet(kvs []string) (map[string]string, error) {
 	out := map[string]string{}

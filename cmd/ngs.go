@@ -96,7 +96,6 @@ func runNgs(ctx context.Context, name string) error {
 	// Project settings: devkit.yaml wins over the global config. All optional.
 	modulePrefix := firstNonEmpty(ws.ModulePrefix, cfg.ModulePrefix, workspace.DefaultModulePrefix(wsDir))
 	idlRepo := firstNonEmpty(ws.IdlRepo, cfg.IdlRepo) // empty: local idl/ repository
-	commonRepo := firstNonEmpty(ws.CommonRepo, cfg.CommonRepo, workspace.DefaultCommonRepo)
 
 	module := ngsFlags.module
 	if module == "" {
@@ -146,6 +145,7 @@ func runNgs(ctx context.Context, name string) error {
 
 	// 1: tools. The component pins the kitex/thriftgo versions its Makefile uses.
 	var statuses []deps.Status
+	var team teamValues
 	if err := r.Step("Checking tools (git, go, kitex, thriftgo)", func(s *ui.Step) error {
 		idx, err := src.Index(ctx)
 		if err != nil {
@@ -171,6 +171,7 @@ func runNgs(ctx context.Context, name string) error {
 		if err != nil {
 			return err
 		}
+		team = teamValuesOf(comp)
 		want := deps.Want{KitexVersion: resolved["KitexVersion"], ThriftgoVersion: resolved["ThriftgoVersion"]}
 		statuses, err = deps.Ensure(ctx, want, s)
 		return err
@@ -192,13 +193,12 @@ func runNgs(ctx context.Context, name string) error {
 	}); err != nil {
 		return fail(err)
 	}
-	if err := r.Step("Preparing common library checkout", func(s *ui.Step) error {
+	if err := r.Step("Preparing common library (team version "+team.CommonVersion+")", func(s *ui.Step) error {
 		if ngsFlags.skipCommon {
-			s.Log("skipped")
-			return nil
-		}
-		if err := workspace.EnsureRepo(ctx, filepath.Join(wsDir, "common"), workspace.RepoURL(cfg.GitHubHost, commonRepo), cfg.GitHubToken, cfg.GitHubHost, s.Logf); err != nil {
-			s.Log("warning: %v", err)
+			s.Log("skipped (--skip-common)")
+		} else {
+			// go.work is written at the end, once the new service exists.
+			syncProject(ctx, cfg, wsDir, teamValues{CommonVersion: team.CommonVersion}, false, s.Logf)
 		}
 		if ws.GoPrivate {
 			pattern := workspace.OrgPattern(module)
@@ -262,11 +262,15 @@ func runNgs(ctx context.Context, name string) error {
 	if err := r.Step("Creating first commit", func(s *ui.Step) error {
 		if ngsFlags.noGit {
 			s.Log("skipped (--no-git)")
+			syncProject(ctx, cfg, wsDir, teamValues{GoVersion: team.GoVersion}, true, s.Logf)
 			return nil
 		}
 		if err := workspace.InitRepo(ctx, svcDir, "chore: scaffold "+name+" with devkit ngs"); err != nil {
 			s.Log("warning: %v", err)
 		}
+		// The new service joins go.work so the IDE resolves the common library
+		// to common/ for it as well.
+		syncProject(ctx, cfg, wsDir, teamValues{GoVersion: team.GoVersion}, true, s.Logf)
 		return nil
 	}); err != nil {
 		return fail(err)
