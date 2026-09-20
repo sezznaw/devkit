@@ -56,7 +56,9 @@ type Status struct {
 	Path      string
 	Installed bool // installed by this run
 	Missing   bool
-	Hint      string
+	// Wanted is set when the tool is present in another version than the team's.
+	Wanted string
+	Hint   string
 }
 
 // Check reports the state of every tool without installing anything. Tool
@@ -65,7 +67,20 @@ type Status struct {
 func Check(ctx context.Context, want Want) []Status {
 	prependPath(devkitGoBin())
 	prependPath(goPathBin(ctx))
-	return []Status{gitStatus(ctx), goStatus(ctx), toolStatus(ctx, "kitex", "-version"), toolStatus(ctx, "thriftgo", "--version")}
+	if want.KitexVersion == "" {
+		want.KitexVersion = DefaultKitexVersion
+	}
+	if want.ThriftgoVersion == "" {
+		want.ThriftgoVersion = DefaultThriftgoVersion
+	}
+	kitex, thriftgo := toolStatus(ctx, "kitex", "-version"), toolStatus(ctx, "thriftgo", "--version")
+	if !kitex.Missing && !SameVersion(kitex.Version, want.KitexVersion) {
+		kitex.Wanted = want.KitexVersion
+	}
+	if !thriftgo.Missing && !SameVersion(thriftgo.Version, want.ThriftgoVersion) {
+		thriftgo.Wanted = want.ThriftgoVersion
+	}
+	return []Status{gitStatus(ctx), goStatus(ctx), kitex, thriftgo}
 }
 
 // Ensure installs whatever is missing. It returns the final statuses and an

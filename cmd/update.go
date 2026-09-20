@@ -273,7 +273,8 @@ func confirmForce(roots []string) error {
 // service or for every service of the project.
 func printStatus(cmd *cobra.Command, roots []string, single bool) error {
 	st := ui.Stdout
-	header := []ui.Cell{ui.C("COMPONENT", nil), ui.C("INSTALLED", nil), ui.C("LATEST", nil), ui.C("FILES", nil), ui.C("LOCAL CHANGES", nil)}
+	header := []ui.Cell{ui.C("COMPONENT", nil), ui.C("INSTALLED", nil), ui.C("LATEST", nil), ui.C("KITEX", nil), ui.C("FILES", nil), ui.C("LOCAL CHANGES", nil)}
+	team := map[string]string{} // component -> the Kitex version the newest template prescribes
 	if !single {
 		header = append([]ui.Cell{ui.C("SERVICE", nil)}, header...)
 	}
@@ -317,7 +318,25 @@ func printStatus(cmd *cobra.Command, roots []string, single bool) error {
 				latestCell = ui.C(l, st.Attention)
 				installed = ui.C(c.Version, st.Yellow)
 			}
-			row := []ui.Cell{ui.C(name, nil), installed, latestCell, ui.C(fmt.Sprint(len(c.Files)), nil), changes}
+			if _, seen := team[name]; !seen {
+				team[name] = ""
+				if comp, err := in.Latest(cmd.Context(), name); err == nil {
+					if v := comp.VarByName("KitexVersion"); v != nil {
+						team[name] = v.Default
+					}
+				}
+			}
+			// What the service is actually built with, from its own go.mod.
+			kitex := ui.C("-", st.Dim)
+			if have := project.RequiredVersion(root, "github.com/cloudwego/kitex"); have != "" {
+				switch want := team[name]; {
+				case want == "" || have == want:
+					kitex = ui.C(have, st.Green)
+				default:
+					kitex = ui.C(have+" (team: "+want+")", st.Attention)
+				}
+			}
+			row := []ui.Cell{ui.C(name, nil), installed, latestCell, kitex, ui.C(fmt.Sprint(len(c.Files)), nil), changes}
 			if !single {
 				row = append([]ui.Cell{ui.C(filepath.Base(root), st.Bold)}, row...)
 			}

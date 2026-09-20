@@ -191,6 +191,20 @@ func (in *Installer) Remove(name string) error {
 	return in.Manifest.Save()
 }
 
+// Latest returns the newest published version of a component.
+func (in *Installer) Latest(ctx context.Context, name string) (*registry.Component, error) {
+	idx, err := in.Source.Index(ctx)
+	if err != nil {
+		return nil, err
+	}
+	v, err := latestVersion(idx, name)
+	if err != nil {
+		return nil, err
+	}
+	comp, _, err := in.fetch(ctx, name, v)
+	return comp, err
+}
+
 // Outdated lists installed components whose registry version differs.
 type Outdated struct {
 	Name, Installed, Latest string
