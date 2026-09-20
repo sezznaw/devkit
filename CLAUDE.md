@@ -193,10 +193,12 @@ renders numbered steps: spinner + ✓/✗ + duration on a TTY, plain lines when
 `Step.Progress()` draws download bars. `ngs` is written as seven `r.Step`
 calls; `devkit doctor` is the standalone entry.
 
-**Write-once files.** `component.json` `once` globs (`go.mod`, `conf/*`,
-`handler/*`, ...) are split off the plan in `installer.apply` before
+**Write-once files.** `component.json` `once` globs (`go.mod`, `idl.mk`,
+`conf/*`, `handler/*`, ...) are split off the plan in `installer.apply` before
 `applyPlan`: created if absent, never tracked, updated or removed. Anything a
-developer edits after scaffolding belongs there; otherwise `go mod tidy` alone
+developer edits after scaffolding belongs there (rule of thumb: user data
+never lives inside a managed file; the IDL list was moved out of the Makefile
+into `idl.mk` for exactly this reason); otherwise `go mod tidy` alone
 makes `devkit update --check` report the component as modified.
 
 Full ngs e2e without GitHub needs three fakes: a local registry

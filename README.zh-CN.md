@@ -82,13 +82,22 @@ common_repo: ""                                         # 默认：sezznaw/devki
     conf/dev.yaml           本地配置，关闭 Nacos 注册
     conf/prod.yaml          生产配置，密钥来自 ${环境变量}
     kitex_gen/              生成的代码，已被 git 忽略
+    idl.mk                  本服务要为哪些 IDL 生成代码（归你编辑）
     Makefile                tools / gen / build / run / test / docker
     .gitlab-ci.yml            以及/或者 .github/workflows/ci.yml：clone IDL 仓库、
                               重新生成、编译、测试（见下面的"CI"一节）
     Dockerfile
 ```
 
-日常流程：改 `../idl/order/order.thrift`，执行 `make gen`，在 `handler/` 里实现新方法，`make run`。IDL 的改动向 IDL 仓库提 PR。生成的代码不提交，CI 会重新生成。
+日常流程：改 `../idl/order/order.thrift`，执行 `make gen`，在 `handler/` 里实现新方法，`make run`。
+
+**调用其他服务。** 每个服务只为自己需要的 IDL 生成代码，清单写在它的 `idl.mk` 里。要在 `order` 里调用 `user`，把对方的 IDL 加进去并重新生成，客户端代码就出现在 `kitex_gen/user/userservice`：
+
+```makefile
+# order/idl.mk
+IDLS := order/order.thrift user/user.thrift
+```
+IDL 的改动向 IDL 仓库提 PR。生成的代码不提交，CI 会重新生成。
 
 ## CI
 
@@ -128,7 +137,7 @@ echo 'source "$HOME/.devkit/env"' >> ~/.zshrc    # 或 ~/.bashrc
 
 ### `update` 如何处理你的文件
 
-归你所有的文件（`go.mod`、`conf/*`、`handler/*`、`README.md`）只创建一次，之后永远不会被碰。对于 devkit 管理的文件：
+归你所有的文件（`go.mod`、`idl.mk`、`conf/*`、`handler/*`、`README.md`）只创建一次，之后永远不会被碰。对于 devkit 管理的文件：
 
 | 你的文件 | `devkit update` | 加 `--force` |
 |---------|-----------------|--------------|

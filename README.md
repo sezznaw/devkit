@@ -92,6 +92,7 @@ then put `<url>` into `idl_repo` so teammates get the same IDLs. The shared
     conf/dev.yaml           local config, Nacos registration disabled
     conf/prod.yaml          production config, secrets from ${ENV_VARS}
     kitex_gen/              generated code, git-ignored
+    idl.mk                  which IDLs this service generates code for (yours to edit)
     Makefile                tools / gen / build / run / test / docker
     .gitlab-ci.yml            and/or .github/workflows/ci.yml: clone the IDL repo,
                               regenerate, build, test (see "CI" below)
@@ -99,7 +100,17 @@ then put `<url>` into `idl_repo` so teammates get the same IDLs. The shared
 ```
 
 Daily loop: edit `../idl/order/order.thrift`, run `make gen`, implement the new
-methods in `handler/`, `make run`. Open a pull request in the IDL repository
+methods in `handler/`, `make run`.
+
+**Calling another service.** Each service generates code only for the IDLs it
+needs, listed in its `idl.mk`. To call `user` from `order`, add the IDL and
+regenerate; the client is then in `kitex_gen/user/userservice`:
+
+```makefile
+# order/idl.mk
+IDLS := order/order.thrift user/user.thrift
+```
+ Open a pull request in the IDL repository
 for IDL changes. Generated code is never committed; CI regenerates it.
 
 ## CI
@@ -152,7 +163,7 @@ Useful `ngs` flags: `--set Port=9000` (template variable), `--module <path>`
 
 ### What `update` does to your files
 
-Files you own (`go.mod`, `conf/*`, `handler/*`, `README.md`) are created once
+Files you own (`go.mod`, `idl.mk`, `conf/*`, `handler/*`, `README.md`) are created once
 and never touched again. For the managed files:
 
 | Your file | `devkit update` | with `--force` |
