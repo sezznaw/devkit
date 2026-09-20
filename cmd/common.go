@@ -11,6 +11,7 @@ import (
 	"github.com/sezznaw/devkit/internal/manifest"
 	"github.com/sezznaw/devkit/internal/project"
 	"github.com/sezznaw/devkit/internal/registry"
+	"github.com/sezznaw/devkit/internal/ui"
 )
 
 // newInstaller locates the service the current directory belongs to and loads
@@ -60,7 +61,7 @@ func parseSet(kvs []string) (map[string]string, error) {
 }
 
 func logf(format string, args ...any) {
-	fmt.Printf(format+"\n", args...)
+	fmt.Println(ui.Stdout.Line(fmt.Sprintf(format, args...)))
 }
 
 func firstNonEmpty(vals ...string) string {

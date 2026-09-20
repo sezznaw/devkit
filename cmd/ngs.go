@@ -139,7 +139,8 @@ func runNgs(ctx context.Context, name string) error {
 	}
 	component := firstNonEmpty(ngsFlags.component, ws.Component, serviceComponent)
 
-	fmt.Fprintf(os.Stderr, "devkit ngs %s\n  project %s\n  module  %s\n\n", name, wsDir, module)
+	es := ui.Stderr
+	fmt.Fprintf(os.Stderr, "%s\n  %s %s\n  %s %s\n\n", es.Heading("devkit ngs "+name), es.Dim("project"), wsDir, es.Dim("module "), es.Cyan(module))
 	r := ui.New(7)
 	fail := func(err error) error { r.Failed(err); return err }
 
@@ -282,11 +283,12 @@ func runNgs(ctx context.Context, name string) error {
 	r.Done("service %s created at %s", name, svcDir)
 	fmt.Println()
 	if hint := deps.PathHint(statuses); hint != "" {
-		fmt.Println(hint)
+		fmt.Println(ui.Stdout.Attention(hint))
 		fmt.Println()
 	}
-	fmt.Println("next steps:")
-	fmt.Printf("  cd %s && make run     # starts with conf/dev.yaml (Nacos disabled)\n", svcDir)
+	st := ui.Stdout
+	fmt.Println(st.Heading("next steps:"))
+	fmt.Printf("  %s     %s\n", st.Bold("cd "+svcDir+" && make run"), st.Dim("# starts with conf/dev.yaml (Nacos disabled)"))
 	switch {
 	case ngsFlags.skipIdl:
 	case idlRepo == "":
@@ -297,7 +299,7 @@ func runNgs(ctx context.Context, name string) error {
 	}
 	fmt.Printf("  create the remote repository for %s and push the service\n", module)
 	if createdSettings {
-		fmt.Printf("\nproject settings (all optional) were written to %s\n", settings)
+		fmt.Printf("\n%s\n", st.Dim("project settings (all optional) were written to "+settings))
 	}
 	return nil
 }

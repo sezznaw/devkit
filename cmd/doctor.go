@@ -29,10 +29,10 @@ same check automatically.`,
 		if !doctorFlags.fix {
 			missing := 0
 			for _, s := range deps.Check(cmd.Context(), want) {
-				state := "ok      " + s.Version
+				state := ui.Stdout.Green("ok     ") + " " + s.Version
 				if s.Missing {
 					missing++
-					state = "MISSING"
+					state = ui.Stdout.Failure("MISSING")
 					if s.Hint != "" {
 						state += "  " + s.Hint
 					}
@@ -40,7 +40,7 @@ same check automatically.`,
 				fmt.Printf("%-10s %s\n", s.Name, state)
 			}
 			if missing > 0 {
-				fmt.Printf("\n%d tool(s) missing; run `devkit doctor --fix` to install them\n", missing)
+				fmt.Printf("\n%s; run `devkit doctor --fix` to install them\n", ui.Stdout.Attention(fmt.Sprintf("%d tool(s) missing", missing)))
 			}
 			return nil
 		}

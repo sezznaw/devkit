@@ -8,7 +8,6 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
-	"text/tabwriter"
 
 	"github.com/spf13/cobra"
 
@@ -74,7 +73,7 @@ Files you own (go.mod, idl.mk, conf/, handler/) are never touched.`,
 		for _, root := range roots {
 			name := filepath.Base(root)
 			if !single {
-				fmt.Printf("== %s\n", name)
+				fmt.Println(ui.Stdout.Heading("== " + name))
 			}
 			in, err := newInstallerAt(root, updateFlags.force, updateFlags.skipHooks)
 			if err == nil {
@@ -95,7 +94,7 @@ Files you own (go.mod, idl.mk, conf/, handler/) are never touched.`,
 					return err
 				}
 				// One broken service must not stop the others.
-				fmt.Printf("   error: %v\n", err)
+				fmt.Printf("   %s %v\n", ui.Stdout.Failure("error:"), err)
 				failed = append(failed, name)
 			}
 		}
@@ -104,15 +103,16 @@ Files you own (go.mod, idl.mk, conf/, handler/) are never touched.`,
 			return nil
 		}
 
-		fmt.Printf("\n%d service(s): %d updated, %d already up to date", len(roots), updated, current)
+		st := ui.Stdout
+		summary := fmt.Sprintf("%d service(s): %s, %d already up to date", len(roots), st.Green(fmt.Sprintf("%d updated", updated)), current)
 		if len(failed) > 0 {
-			fmt.Printf(", %d failed (%s)", len(failed), strings.Join(failed, ", "))
+			summary += ", " + st.Failure(fmt.Sprintf("%d failed (%s)", len(failed), strings.Join(failed, ", ")))
 		}
-		fmt.Println()
+		fmt.Println("\n" + st.Bold(summary))
 		if len(merged) > 0 {
-			fmt.Println("modified locally, not overwritten; merge the .new copy by hand or rerun with --force:")
+			fmt.Println(st.Attention("modified locally, not overwritten") + "; merge the .new copy by hand or rerun with --force:")
 			for _, f := range merged {
-				fmt.Printf("  %s\n", f)
+				fmt.Printf("  %s\n", st.Yellow(f))
 			}
 		}
 		printNotes(notes)
@@ -149,9 +149,10 @@ func printNotes(notes []registry.ChangeEntry) {
 	if len(notes) == 0 {
 		return
 	}
-	fmt.Println("\nwhat changed:")
+	st := ui.Stdout
+	fmt.Println("\n" + st.Heading("what changed:"))
 	for _, e := range notes {
-		fmt.Printf("  %s\n", e.Version)
+		fmt.Printf("  %s\n", st.Cyan(e.Version))
 		for _, c := range e.Changes {
 			fmt.Printf("    - %s\n", c)
 		}
@@ -160,20 +161,20 @@ func printNotes(notes []registry.ChangeEntry) {
 	for _, e := range notes {
 		for _, a := range e.Action {
 			if first {
-				fmt.Println("\nyour own files are never rewritten; you may want to:")
+				fmt.Println("\n" + st.Attention("your own files are never rewritten; you may want to:"))
 				first = false
 			}
 			for i, line := range strings.Split(a, "\n") {
 				if i == 0 {
-					fmt.Printf("  * [%s] %s\n", e.Version, line)
+					fmt.Printf("  %s %s %s\n", st.Yellow("*"), st.Cyan("["+e.Version+"]"), line)
 				} else {
-					fmt.Printf("      %s\n", line)
+					fmt.Printf("      %s\n", st.Bold(line)) // the snippet to copy
 				}
 			}
 		}
 	}
 	if !first {
-		fmt.Println("\nevery setting is documented in conf/README.md of each service.")
+		fmt.Println("\n" + st.Dim("every setting is documented in conf/README.md of each service."))
 	}
 }
 
@@ -246,9 +247,9 @@ func confirmForce(roots []string) error {
 	if len(files) == 0 || updateFlags.yes {
 		return nil
 	}
-	fmt.Printf("--force will overwrite %d file(s) you modified (each is kept as <file>.bak):\n", len(files))
+	fmt.Println(ui.Stdout.Attention(fmt.Sprintf("--force will overwrite %d file(s) you modified", len(files))) + " (each is kept as <file>.bak):")
 	for _, f := range files {
-		fmt.Printf("  %s\n", f)
+		fmt.Printf("  %s\n", ui.Stdout.Yellow(f))
 	}
 	if !ui.IsTerminal(os.Stdin) {
 		return errors.New("refusing to overwrite them without confirmation; pass --yes to proceed")
@@ -264,13 +265,12 @@ func confirmForce(roots []string) error {
 // printStatus shows installed and latest versions and local changes, for one
 // service or for every service of the project.
 func printStatus(cmd *cobra.Command, roots []string, single bool) error {
-	w := tabwriter.NewWriter(os.Stdout, 0, 4, 2, ' ', 0)
-	if single {
-		fmt.Fprintln(w, "COMPONENT\tINSTALLED\tLATEST\tFILES\tLOCAL CHANGES")
-	} else {
-		fmt.Fprintln(w, "SERVICE\tCOMPONENT\tINSTALLED\tLATEST\tFILES\tLOCAL CHANGES")
+	st := ui.Stdout
+	header := []ui.Cell{ui.C("COMPONENT", nil), ui.C("INSTALLED", nil), ui.C("LATEST", nil), ui.C("FILES", nil), ui.C("LOCAL CHANGES", nil)}
+	if !single {
+		header = append([]ui.Cell{ui.C("SERVICE", nil)}, header...)
 	}
-	rows := 0
+	rows := [][]ui.Cell{header}
 	for _, root := range roots {
 		in, err := newInstallerAt(root, false, true)
 		if err != nil {
@@ -291,35 +291,38 @@ func printStatus(cmd *cobra.Command, roots []string, single bool) error {
 				return err
 			}
 			modified, missing := 0, 0
-			for _, st := range states {
-				switch st {
+			for _, s := range states {
+				switch s {
 				case manifest.Modified:
 					modified++
 				case manifest.Missing:
 					missing++
 				}
 			}
-			changes := "none"
+			// Green: nothing to do. Yellow: something for you to look at.
+			changes := ui.C("none", st.Dim)
 			if modified > 0 || missing > 0 {
-				changes = fmt.Sprintf("%d modified, %d missing", modified, missing)
+				changes = ui.C(fmt.Sprintf("%d modified, %d missing", modified, missing), st.Yellow)
 			}
-			l := latest[name]
-			if l == "" {
-				l = c.Version + " (up to date)"
+			latestCell := ui.C(c.Version+" (up to date)", st.Green)
+			installed := ui.C(c.Version, nil)
+			if l := latest[name]; l != "" {
+				latestCell = ui.C(l, st.Attention)
+				installed = ui.C(c.Version, st.Yellow)
 			}
-			if single {
-				fmt.Fprintf(w, "%s\t%s\t%s\t%d\t%s\n", name, c.Version, l, len(c.Files), changes)
-			} else {
-				fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%d\t%s\n", filepath.Base(root), name, c.Version, l, len(c.Files), changes)
+			row := []ui.Cell{ui.C(name, nil), installed, latestCell, ui.C(fmt.Sprint(len(c.Files)), nil), changes}
+			if !single {
+				row = append([]ui.Cell{ui.C(filepath.Base(root), st.Bold)}, row...)
 			}
-			rows++
+			rows = append(rows, row)
 		}
 	}
-	if rows == 0 {
+	if len(rows) == 1 {
 		fmt.Println("no components installed")
 		return nil
 	}
-	return w.Flush()
+	ui.Table(os.Stdout, rows)
+	return nil
 }
 
 func init() {

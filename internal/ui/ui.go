@@ -41,7 +41,7 @@ func New(total int) *Runner {
 
 // IsTerminal reports whether f is a character device (an interactive terminal).
 func IsTerminal(f *os.File) bool {
-	if os.Getenv("NO_COLOR") != "" || os.Getenv("CI") != "" || os.Getenv("DEVKIT_PLAIN") != "" {
+	if os.Getenv("CI") != "" || os.Getenv("DEVKIT_PLAIN") != "" {
 		return false
 	}
 	fi, err := f.Stat()
@@ -69,7 +69,19 @@ func (r *Runner) Step(title string, fn func(s *Step) error) error {
 }
 
 func (r *Runner) label(n int, title string) string {
-	return fmt.Sprintf("[%d/%d] %s", n, r.Total, title)
+	st := For(r.Out)
+	return st.Dim(fmt.Sprintf("[%d/%d]", n, r.Total)) + " " + title
+}
+
+// result renders the closing line of a step.
+func (r *Runner) result(n int, title string, err error, elapsed time.Duration) string {
+	st := For(r.Out)
+	mark := st.Success(okMark)
+	if err != nil {
+		mark = st.Failure(errMark)
+		title = st.Red(title)
+	}
+	return fmt.Sprintf("%s %s %s", r.label(n, title), mark, st.Dim(elapsed.String()))
 }
 
 func (s *Step) begin() {
@@ -113,30 +125,16 @@ func (s *Step) end(err error) {
 	r := s.r
 	elapsed := time.Since(s.started).Round(100 * time.Millisecond)
 	s.stopSpinner()
-	mark := okMark
-	if err != nil {
-		mark = errMark
-	}
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	if r.TTY {
-		if s.lines > 0 {
-			// Sub-lines were printed below the (now erased) spinner line; print the
-			// result line after them so the order stays readable.
-			fmt.Fprintf(r.Out, "%s %s %s\n", r.label(r.n, s.title), mark, elapsed)
-		} else {
-			fmt.Fprintf(r.Out, "%s %s %s\n", r.label(r.n, s.title), mark, elapsed)
-		}
-	} else {
-		fmt.Fprintf(r.Out, "%s %s %s\n", r.label(r.n, s.title), mark, elapsed)
-	}
+	fmt.Fprintln(r.Out, r.result(r.n, s.title, err, elapsed))
 }
 
 // Log prints a detail line under the current step.
 func (s *Step) Log(format string, args ...any) {
 	s.stopSpinnerForOutput()
 	s.r.mu.Lock()
-	fmt.Fprintf(s.r.Out, indent+format+"\n", args...)
+	fmt.Fprintln(s.r.Out, For(s.r.Out).Line(indent+fmt.Sprintf(format, args...)))
 	s.r.mu.Unlock()
 	s.lines++
 }
@@ -179,7 +177,12 @@ func (w *indentWriter) Write(p []byte) (int, error) {
 			continue
 		}
 		w.s.r.mu.Lock()
-		fmt.Fprintf(w.s.r.Out, indent+"%s\n", line)
+		st := For(w.s.r.Out)
+		if styled := st.Line(indent + line); styled != indent+line {
+			fmt.Fprintln(w.s.r.Out, styled)
+		} else {
+			fmt.Fprintln(w.s.r.Out, indent+st.Dim(line))
+		}
 		w.s.r.mu.Unlock()
 		w.s.lines++
 	}
@@ -260,12 +263,15 @@ func human(n int64) string {
 func (r *Runner) Done(format string, args ...any) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	fmt.Fprintf(r.Out, "\n%s %s (%s)\n", okMark, fmt.Sprintf(format, args...), time.Since(r.start).Round(100*time.Millisecond))
+	st := For(r.Out)
+	fmt.Fprintf(r.Out, "\n%s %s %s\n", st.Success(okMark), st.Bold(fmt.Sprintf(format, args...)),
+		st.Dim("("+time.Since(r.start).Round(100*time.Millisecond).String()+")"))
 }
 
 // Failed prints the final failure line.
 func (r *Runner) Failed(err error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	fmt.Fprintf(r.Out, "\n%s %v\n", errMark, err)
+	st := For(r.Out)
+	fmt.Fprintf(r.Out, "\n%s %s\n", st.Failure(errMark), st.Red(err.Error()))
 }

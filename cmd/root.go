@@ -6,6 +6,8 @@ import (
 	"os"
 
 	"github.com/spf13/cobra"
+
+	"github.com/sezznaw/devkit/internal/ui"
 )
 
 var rootCmd = &cobra.Command{
@@ -27,7 +29,7 @@ thriftgo) are installed automatically.`,
 // Execute runs the root command and prints any error to stderr.
 func Execute(ctx context.Context) error {
 	if err := rootCmd.ExecuteContext(ctx); err != nil {
-		fmt.Fprintln(os.Stderr, "error:", err)
+		fmt.Fprintln(os.Stderr, ui.Stderr.Failure("error:"), err)
 		return err
 	}
 	return nil
