@@ -29,6 +29,10 @@ type Installer struct {
 	Log func(format string, args ...any)
 	// Output receives hook output; defaults to stdout/stderr.
 	Output io.Writer
+
+	// LastSkipped lists the files the most recent Install/Update left alone
+	// because they were modified locally (a .new copy was written for each).
+	LastSkipped []string
 }
 
 func (in *Installer) runHooks(cmds []string) error {
@@ -209,6 +213,7 @@ func (in *Installer) apply(comp *registry.Component, dir string, userVars map[st
 	if err != nil {
 		return err
 	}
+	in.LastSkipped = res.Skipped
 	in.report(res)
 	if err := in.writeOnce(once); err != nil {
 		return err

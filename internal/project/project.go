@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"sort"
 	"strings"
 
 	"github.com/sezznaw/devkit/internal/manifest"
@@ -31,6 +32,28 @@ func FindRoot(dir string) (string, error) {
 		}
 		dir = parent
 	}
+}
+
+// Services lists the immediate subdirectories of dir that were created by
+// devkit (they contain a manifest), sorted by name. Checkouts such as idl/ and
+// common/ have no manifest and are therefore never mistaken for services.
+func Services(dir string) ([]string, error) {
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return nil, err
+	}
+	var out []string
+	for _, e := range entries {
+		if !e.IsDir() || strings.HasPrefix(e.Name(), ".") {
+			continue
+		}
+		sub := filepath.Join(dir, e.Name())
+		if manifest.Exists(sub) {
+			out = append(out, sub)
+		}
+	}
+	sort.Strings(out)
+	return out, nil
 }
 
 // GoModule returns the module path declared in root/go.mod, or "" if there is none.

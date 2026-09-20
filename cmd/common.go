@@ -20,6 +20,11 @@ func newInstaller(force, skipHooks bool) (*installer.Installer, error) {
 	if err != nil {
 		return nil, err
 	}
+	return newInstallerAt(root, force, skipHooks)
+}
+
+// newInstallerAt builds an installer for the service rooted at root.
+func newInstallerAt(root string, force, skipHooks bool) (*installer.Installer, error) {
 	cfg, err := config.Load()
 	if err != nil {
 		return nil, err
