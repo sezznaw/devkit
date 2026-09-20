@@ -75,8 +75,9 @@ idl_repo: "git@gitlab.yourcompany.com:shop/idl.git"     # 或 GitHub 上的 owne
   idl/                      IDL 仓库的 clone；已替你加好 order/order.thrift
   common/                   共享库的 clone，供阅读
   order/
-    cmd/order/main.go       用 common 启动 Kitex：Nacos、日志、配置
-    handler/handler.go      你的 RPC 实现
+    cmd/order/main.go       框架入口；由 devkit update 替换，不要修改
+    app/app.go              归你：本服务的 Config、依赖的创建和退出清理
+    handler/handler.go      归你：RPC 的实现
     conf/dev.yaml           本地配置，关闭 Nacos 注册；每个配置项都有说明
     conf/prod.yaml          生产配置，密钥来自 ${环境变量}
     conf/README.md          全部配置项的参考文档，由 devkit 保持最新
@@ -87,6 +88,8 @@ idl_repo: "git@gitlab.yourcompany.com:shop/idl.git"     # 或 GitHub 上的 owne
                               重新生成、编译、测试（见下面的"CI"一节）
     Dockerfile
 ```
+
+**框架文件和你的文件。** 框架由专人统一维护，所以任何只属于某个服务的东西都不放在框架文件里。`main.go`、Makefile、CI 文件、Dockerfile 和 `conf/README.md` 会被 `devkit update` 替换；一旦改动其中某个文件，它以后就无法再被升级。其余文件都归你所有，永远不会被改写。要给服务加自己的配置节，或者加一个 Redis 这样的依赖，改 `app/app.go`：在 `Config` 里加字段，在 `Setup` 里创建客户端并注册 `kitexx.OnShutdown`，再传给 `handler.New(...)`。
 
 日常流程：改 `../idl/order/order.thrift`，执行 `make gen`，在 `handler/` 里实现新方法，`make run`。
 
@@ -175,7 +178,7 @@ your own files are never rewritten; you may want to:
 
 ### `update` 如何处理你的文件
 
-归你所有的文件（`go.mod`、`idl.mk`、`conf/*.yaml`、`handler/*`、`README.md`）只创建一次，之后永远不会被碰。对于 devkit 管理的文件：
+归你所有的文件（`go.mod`、`idl.mk`、`app/*`、`conf/*.yaml`、`handler/*`、`README.md`）只创建一次，之后永远不会被碰。对于 devkit 管理的文件：
 
 | 你的文件 | `devkit update` | 加 `--force` |
 |---------|-----------------|--------------|

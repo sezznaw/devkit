@@ -85,8 +85,9 @@ then put `<url>` into `idl_repo` so teammates get the same IDLs. The shared
   idl/                      clone of the IDL repository; order/order.thrift was added for you
   common/                   clone of the shared library, for reading
   order/
-    cmd/order/main.go       starts Kitex with Nacos, logging and config from common
-    handler/handler.go      your RPC implementations
+    cmd/order/main.go       framework entry point; replaced by devkit update, never edit it
+    app/app.go              yours: the service's Config, its dependencies and shutdown cleanup
+    handler/handler.go      yours: the RPC implementations
     conf/dev.yaml           local config, Nacos registration disabled; every setting explained
     conf/prod.yaml          production config, secrets from ${ENV_VARS}
     conf/README.md          reference of all settings, kept up to date by devkit
@@ -97,6 +98,15 @@ then put `<url>` into `idl_repo` so teammates get the same IDLs. The shared
                               regenerate, build, test (see "CI" below)
     Dockerfile
 ```
+
+**Framework files and your files.** The framework is maintained centrally, so
+nothing specific to one service lives in a framework file. `main.go`, the
+Makefile, the CI files, the Dockerfile and `conf/README.md` are replaced by
+`devkit update`; editing one of them blocks its future updates. Everything
+else is yours and never rewritten. To give the service its own configuration
+section or a dependency such as Redis, edit `app/app.go`: add a field to
+`Config`, create the client in `Setup`, register `kitexx.OnShutdown` there and
+pass it to `handler.New(...)`.
 
 Daily loop: edit `../idl/order/order.thrift`, run `make gen`, implement the new
 methods in `handler/`, `make run`.
@@ -212,7 +222,7 @@ setting the service's version supports, with defaults.
 
 ### What `update` does to your files
 
-Files you own (`go.mod`, `idl.mk`, `conf/*.yaml`, `handler/*`, `README.md`) are created once
+Files you own (`go.mod`, `idl.mk`, `app/*`, `conf/*.yaml`, `handler/*`, `README.md`) are created once
 and never touched again. For the managed files:
 
 | Your file | `devkit update` | with `--force` |

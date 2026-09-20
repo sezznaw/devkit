@@ -225,7 +225,7 @@ with the manual actions called out. `registry.CompareVersions` is numeric per
 dotted part, so 0.10.0 sorts after 0.9.0.
 
 **Write-once files.** `component.json` `once` globs (`go.mod`, `idl.mk`,
-`conf/*`, `handler/*`, ...) are split off the plan in `installer.apply` before
+`app/*`, `conf/*.yaml`, `handler/*`, ...) are split off the plan in `installer.apply` before
 `applyPlan`: created if absent, never tracked, updated or removed. Anything a
 developer edits after scaffolding belongs there (rule of thumb: user data
 never lives inside a managed file; the IDL list was moved out of the Makefile
