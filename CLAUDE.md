@@ -241,6 +241,19 @@ action). `Installer.Update` stores `ChangesBetween(old, new)` in `LastNotes`;
 with the manual actions called out. `registry.CompareVersions` is numeric per
 dotted part, so 0.10.0 sorts after 0.9.0.
 
+**common/ and go.work.** The owner requires that "go to definition" on the
+common library lands in the project, and that `common/` is current after
+`ngs` and `update`. `cmd/common.go:syncProject` does both:
+`workspace.SyncCommon` clones/fetches `<project>/common` and checks out the
+team's `CommonVersion` *tag* (detached; never main, so the directory equals
+what the services pin and local builds equal CI), and `workspace.SyncGoWork`
+writes `<project>/go.work` with `./common` and every service. Rules: a dirty
+`common/` is never touched, only reported (ngs, update, `update --check`); a
+`go.work` without devkit's marker is never overwritten; both failures are
+warnings, not errors; `go.work` is per machine because the project directory
+is not a repository, so CI and Docker never see it. `update` runs
+`syncAfterUpdate` for single-service and project scope alike.
+
 **Write-once files.** `component.json` `once` globs (`go.mod`, `idl.mk`,
 `app/*`, `conf/*.yaml`, `handler/*`, ...) are split off the plan in `installer.apply` before
 `applyPlan`: created if absent, never tracked, updated or removed. Anything a

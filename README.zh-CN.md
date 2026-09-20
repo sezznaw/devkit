@@ -72,8 +72,9 @@ idl_repo: "git@gitlab.yourcompany.com:shop/idl.git"     # 或 GitHub 上的 owne
 ```
 ~/work/shop/
   devkit.yaml               可选的项目设置
+  go.work                   让 Go 工具和 IDE 使用 ./common（只存在于本机）
   idl/                      IDL 仓库的 clone；已替你加好 order/order.thrift
-  common/                   共享库的 clone，供阅读
+  common/                   团队当前版本的共享库；"跳转到定义"会落在这里
   order/
     cmd/order/main.go       框架入口；由 devkit update 替换，不要修改
     app/app.go              归你：本服务的 Config、依赖的创建和退出清理
@@ -88,6 +89,10 @@ idl_repo: "git@gitlab.yourcompany.com:shop/idl.git"     # 或 GitHub 上的 owne
                               重新生成、编译、测试（见下面的"CI"一节）
     Dockerfile
 ```
+
+**common 库是你项目的一部分。** `ngs` 和 `devkit update` 会让 `common/` 始终检出团队当前发布的版本，并在旁边维护一个 `go.work`，其中列出 `common/` 和每个服务。Go 工具和 IDE 因此会把 `github.com/sezznaw/devkit-common` 解析到这个目录，"跳转到定义"打开的是你项目里的代码，而不是只读的模块缓存。由于 `common/` 里正好是你的服务锁定的那个发布版本，你本地编出来的和 CI 编出来的完全一致；`go.work` 只存在于你的机器上，CI 和 Docker 构建都看不到它。如果你的 IDE 只打开了单个服务而没有识别到它，请改为打开项目目录。
+
+不要修改 `common/`：那里的改动只影响你本机的编译结果。devkit 不会丢弃这类改动，但 `update` 和 `update --check` 会明确提示。对库的修改应当提交到它自己的仓库，通过发布新版本到达所有人。`GOWORK=off go build ./...` 可以按 CI 的方式编译。
 
 **框架文件和你的文件。** 框架由专人统一维护，所以任何只属于某个服务的东西都不放在框架文件里。`main.go`、Makefile、CI 文件、Dockerfile 和 `conf/README.md` 会被 `devkit update` 替换；一旦改动其中某个文件，它以后就无法再被升级。其余文件都归你所有，永远不会被改写。要给服务加自己的配置节，或者加一个 Redis 这样的依赖，改 `app/app.go`：在 `Config` 里加字段，在 `Setup` 里创建客户端并注册 `kitexx.OnShutdown`，再传给 `handler.New(...)`。
 
