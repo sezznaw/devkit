@@ -153,13 +153,35 @@ echo 'source "$HOME/.devkit/env"' >> ~/.zshrc    # or ~/.bashrc
 | Command | When you need it |
 |---------|------------------|
 | `devkit ngs <service>` | create a service in the current project directory |
-| `devkit update` | inside a service: upgrade the devkit-managed files (Makefile, CI, Dockerfile, `main.go`) to the latest template. `--check` only shows versions and local changes |
+| `devkit update` | upgrade the devkit-managed files (Makefile, CI, Dockerfile, `main.go`) to the latest template. Inside a service it updates that service; in the project directory it updates every service. `--check` only shows versions and local changes |
 | `devkit self-update` | upgrade devkit itself. `--check` only reports |
 | `devkit doctor` | show the state of git, Go, kitex, thriftgo. `--fix` installs what is missing |
 | `devkit version` | version info for bug reports |
 
 Useful `ngs` flags: `--set Port=9000` (template variable), `--module <path>`
 (override the module path), `--skip-common`, `--skip-idl`, `--no-git`.
+
+### Updating all services at once
+
+Run `update` in the project directory instead of inside a service:
+
+```
+$ cd ~/work/shop && devkit update --check
+SERVICE  COMPONENT      INSTALLED  LATEST  FILES  LOCAL CHANGES
+game     kitex-service  0.2.0      0.2.1   6      1 modified, 0 missing
+user     kitex-service  0.2.1      0.2.1 (up to date)  6  none
+
+$ devkit update
+...
+3 service(s): 3 updated, 0 already up to date
+modified locally, not overwritten; merge the .new copy by hand or rerun with --force:
+  game/Makefile
+```
+
+Services are the subdirectories created by devkit; `idl/` and `common/` are
+never touched. A service that fails does not stop the others. With `--force`
+in the project directory devkit first lists the modified files it is about to
+overwrite and asks for confirmation (`--yes` skips the question).
 
 ### What `update` does to your files
 

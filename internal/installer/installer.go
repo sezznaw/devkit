@@ -296,7 +296,8 @@ func (in *Installer) writeOnce(files []render.PlannedFile) error {
 	for _, f := range files {
 		abs := in.abs(f.Rel)
 		if _, err := os.Stat(abs); err == nil {
-			in.Log("  = %s  (exists, not managed by devkit)", f.Rel)
+			// The developer's file. Saying so on every update is noise, and
+			// across a whole project it buries the lines that matter.
 			continue
 		}
 		if err := writeFile(abs, f.Content, f.Mode); err != nil {

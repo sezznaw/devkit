@@ -78,8 +78,17 @@ Release rules learned the hard way:
 
 Data flows in one direction: `cmd/` → `internal/installer` → (`registry`,
 `render`, `manifest`, `project`). Commands do flag parsing only; `update`
-builds an `installer.Installer` through `cmd/common.go:newInstaller`, `ngs`
-builds its own for the fresh directory. `Installer.Remove` has no command any
+builds one `installer.Installer` per service through
+`cmd/common.go:newInstallerAt`, `ngs` builds its own for the fresh directory.
+
+`update` derives its scope from where it runs (`cmd/update.go:updateScope`):
+inside a service (`project.FindRoot`) it handles that one; otherwise it takes
+the project directory (`workspace.Find`, else cwd) and every subdirectory
+with a manifest (`project.Services`), so `idl/` and `common/` are never
+candidates. In that mode a failing service is reported and skipped, a summary
+lists files left alone (`Installer.LastSkipped`), and `--force` goes through
+`confirmForce`: list the modified managed files, ask, refuse without a
+terminal unless `--yes`. `Installer.Remove` has no command any
 more but stays as the empty-plan case of the same engine.
 
 **registry.Source** (`internal/registry/source.go`) is the abstraction over

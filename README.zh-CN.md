@@ -128,12 +128,31 @@ echo 'source "$HOME/.devkit/env"' >> ~/.zshrc    # 或 ~/.bashrc
 | 命令 | 什么时候用 |
 |------|-----------|
 | `devkit ngs <服务名>` | 在当前项目目录下创建服务 |
-| `devkit update` | 在服务目录内执行：把 devkit 管理的文件（Makefile、CI、Dockerfile、`main.go`）升级到最新模板。`--check` 只显示版本和本地改动 |
+| `devkit update` | 把 devkit 管理的文件（Makefile、CI、Dockerfile、`main.go`）升级到最新模板。在服务目录内执行只更新该服务；在项目目录下执行则更新全部服务。`--check` 只显示版本和本地改动 |
 | `devkit self-update` | 升级 devkit 自身。`--check` 只报告 |
 | `devkit doctor` | 查看 git、Go、kitex、thriftgo 的状态。`--fix` 安装缺失的工具 |
 | `devkit version` | 报问题时提供版本信息 |
 
 常用的 `ngs` 参数：`--set Port=9000`（模板变量）、`--module <路径>`（覆盖 module 路径）、`--skip-common`、`--skip-idl`、`--no-git`。
+
+### 一次更新全部服务
+
+在项目目录下执行 `update`，而不是进到某个服务里：
+
+```
+$ cd ~/work/shop && devkit update --check
+SERVICE  COMPONENT      INSTALLED  LATEST  FILES  LOCAL CHANGES
+game     kitex-service  0.2.0      0.2.1   6      1 modified, 0 missing
+user     kitex-service  0.2.1      0.2.1 (up to date)  6  none
+
+$ devkit update
+...
+3 service(s): 3 updated, 0 already up to date
+modified locally, not overwritten; merge the .new copy by hand or rerun with --force:
+  game/Makefile
+```
+
+"服务"指由 devkit 创建的那些子目录，`idl/` 和 `common/` 不会被碰。某个服务更新失败不会中断其他服务。在项目目录下使用 `--force` 时，devkit 会先列出即将被覆盖的、你改过的文件并要求确认（`--yes` 跳过询问）。
 
 ### `update` 如何处理你的文件
 
