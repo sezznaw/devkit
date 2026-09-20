@@ -73,6 +73,24 @@ func GoModule(root string) string {
 	return ""
 }
 
+// RequiredVersion returns the version of module that root/go.mod requires
+// (direct or indirect), or "" if it is not listed.
+func RequiredVersion(root, module string) string {
+	f, err := os.Open(filepath.Join(root, "go.mod"))
+	if err != nil {
+		return ""
+	}
+	defer f.Close()
+	sc := bufio.NewScanner(f)
+	for sc.Scan() {
+		fields := strings.Fields(strings.TrimPrefix(strings.TrimSpace(sc.Text()), "require "))
+		if len(fields) >= 2 && fields[0] == module {
+			return fields[1]
+		}
+	}
+	return ""
+}
+
 // BuiltinVars are template variables available to every component.
 func BuiltinVars(root string) map[string]string {
 	return map[string]string{

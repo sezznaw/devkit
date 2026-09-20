@@ -35,3 +35,14 @@ func TestCheckReportsGit(t *testing.T) {
 		t.Fatalf("git status: %+v", st[0])
 	}
 }
+
+func TestSameVersion(t *testing.T) {
+	for _, c := range []struct {
+		a, b string
+		want bool
+	}{{"v0.16.3", "v0.16.3", true}, {"0.4.5", "v0.4.5", true}, {" v0.4.5\n", "0.4.5", true}, {"v0.16.2", "v0.16.3", false}, {"", "v1", false}} {
+		if got := SameVersion(c.a, c.b); got != c.want {
+			t.Errorf("SameVersion(%q, %q) = %v", c.a, c.b, got)
+		}
+	}
+}

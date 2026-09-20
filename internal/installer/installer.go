@@ -30,10 +30,6 @@ type Installer struct {
 	// Output receives hook output; defaults to stdout/stderr.
 	Output io.Writer
 
-	// pendingExplicit carries the names of explicitly chosen variables from
-	// Install/Update into apply, which writes the manifest.
-	pendingExplicit map[string]bool
-
 	// LastNotes is the changelog between the previously installed version
 	// and the one the most recent Update moved to.
 	LastNotes []registry.ChangeEntry
@@ -98,6 +94,9 @@ func (in *Installer) install(ctx context.Context, idx *registry.Index, opts Opti
 	if err != nil {
 		return err
 	}
+	if err := rejectTracked(comp, opts.Vars); err != nil {
+		return err
+	}
 	// Fail on missing variables before touching dependencies.
 	if _, err := ResolveVars(in.Root, comp, opts.Vars); err != nil {
 		return err
@@ -109,10 +108,6 @@ func (in *Installer) install(ctx context.Context, idx *registry.Index, opts Opti
 	}
 
 	in.Log("installing %s@%s", name, comp.Version)
-	in.pendingExplicit = map[string]bool{}
-	for k := range opts.Vars {
-		in.pendingExplicit[k] = true
-	}
 	if err := in.apply(comp, dir, opts.Vars, old, comp.Hooks.PostInstall, "post_install"); err != nil {
 		return err
 	}
@@ -137,12 +132,17 @@ func (in *Installer) Update(ctx context.Context, opts Options) (bool, error) {
 			return false, err
 		}
 	}
-	if target == old.Version && !in.Force {
-		return false, nil
-	}
 	comp, dir, err := in.fetch(ctx, name, target)
 	if err != nil {
 		return false, err
+	}
+	// Refuse a version choice even when there is nothing to update; ignoring it
+	// silently would let someone believe the pin took effect.
+	if err := rejectTracked(comp, opts.Vars); err != nil {
+		return false, err
+	}
+	if target == old.Version && !in.Force {
+		return false, nil
 	}
 	for _, dep := range comp.Deps {
 		if err := in.install(ctx, idx, Options{Name: dep}, map[string]bool{name: true}, false); err != nil {
@@ -151,26 +151,17 @@ func (in *Installer) Update(ctx context.Context, opts Options) (bool, error) {
 	}
 
 	// Reuse what the service was created with; --set overrides it. Tracked
-	// variables nobody chose explicitly follow the new template default.
-	explicit := in.explicitVars(ctx, name, old)
+	// variables (versions) are never reused: they come from the template.
 	vars := map[string]string{}
 	for k, v := range old.Vars {
-		if d := comp.VarByName(k); d != nil && d.Track && !explicit[k] {
+		if d := comp.VarByName(k); d != nil && d.Track {
 			continue
 		}
 		vars[k] = v
 	}
 	for k, v := range opts.Vars {
-		if d := comp.VarByName(k); v == "" && d != nil && d.Track {
-			// `--set KitexVersion=` means: stop pinning, follow the template again.
-			delete(vars, k)
-			delete(explicit, k)
-			continue
-		}
 		vars[k] = v
-		explicit[k] = true
 	}
-	in.pendingExplicit = explicit
 
 	in.Log("updating %s %s -> %s", name, old.Version, comp.Version)
 	from := old.Version
@@ -250,7 +241,6 @@ func (in *Installer) apply(comp *registry.Component, dir string, userVars map[st
 		Version:     comp.Version,
 		InstalledAt: time.Now().UTC(),
 		Vars:        userVarsOnly(comp, vars),
-		Explicit:    sortedKeys(in.pendingExplicit, comp),
 		Deps:        comp.Deps,
 		Files:       hashes,
 	}
@@ -408,46 +398,32 @@ func declared(comp *registry.Component, name string) bool {
 	return false
 }
 
-// explicitVars returns the variables of an installed component that somebody
-// chose. New manifests record them. For one written before that, compare each
-// stored value with the default of the version that produced it: equal means
-// the default merely applied, different means it was chosen. If that old
-// version cannot be fetched, every stored value counts as chosen, which keeps
-// today's behaviour instead of guessing.
-func (in *Installer) explicitVars(ctx context.Context, name string, old *manifest.Installed) map[string]bool {
-	out := map[string]bool{}
-	if old.Explicit != nil {
-		for _, k := range old.Explicit {
-			out[k] = true
-		}
-		return out
-	}
-	prev, _, err := in.fetch(ctx, name, old.Version)
-	if err != nil || prev.Version != old.Version {
-		for k := range old.Vars {
-			out[k] = true
-		}
-		return out
-	}
-	for k, v := range old.Vars {
-		if d := prev.VarByName(k); d == nil || d.Default != v {
-			out[k] = true
+// rejectTracked refuses an attempt to choose a tracked variable. Versions are
+// decided by the template for the whole team; a per-service choice is exactly
+// the drift this rule exists to prevent.
+func rejectTracked(comp *registry.Component, vars map[string]string) error {
+	var names []string
+	for k := range vars {
+		if d := comp.VarByName(k); d != nil && d.Track {
+			names = append(names, k)
 		}
 	}
-	return out
+	if len(names) == 0 {
+		return nil
+	}
+	sort.Strings(names)
+	return fmt.Errorf("%s cannot be set: versions are fixed by the %s template (currently %s) so that every service uses the same ones; remove it from --set and from `vars:` in devkit.yaml",
+		strings.Join(names, ", "), comp.Name, trackedSummary(comp))
 }
 
-// sortedKeys lists the explicit variables the component declares, sorted, and
-// never nil: an empty list still says "this manifest knows the distinction".
-func sortedKeys(set map[string]bool, comp *registry.Component) []string {
-	out := []string{}
-	for k := range set {
-		if comp.VarByName(k) != nil {
-			out = append(out, k)
+func trackedSummary(comp *registry.Component) string {
+	var parts []string
+	for _, v := range comp.Vars {
+		if v.Track && strings.HasSuffix(v.Name, "Version") {
+			parts = append(parts, v.Name+"="+v.Default)
 		}
 	}
-	sort.Strings(out)
-	return out
+	return strings.Join(parts, ", ")
 }
 
 func userVarsOnly(comp *registry.Component, vars map[string]string) map[string]string {

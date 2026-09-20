@@ -13,11 +13,8 @@ import (
 	"github.com/sezznaw/devkit/internal/registry"
 )
 
-// versioned is a registry that, like the real one, can still serve old
-// versions. The legacy-manifest logic needs the defaults of the version a
-// service was created with.
+// versioned is a registry that can serve several versions of one component.
 type versioned struct {
-	t      *testing.T
 	dir    string
 	latest string
 }
@@ -76,101 +73,65 @@ func read(t *testing.T, root, rel string) string {
 	return strings.TrimSpace(string(b))
 }
 
-func TestTrackedDefaultsFollowTheTemplateOthersStayFrozen(t *testing.T) {
-	src := &versioned{t: t, dir: t.TempDir()}
+func TestVersionsComeFromTheTemplateEverythingElseStaysAsCreated(t *testing.T) {
+	src := &versioned{dir: t.TempDir()}
 	src.publish("1.0.0", vars("v0.16", "8888"), mk)
 	root := newProject(t)
+	if err := inst(t, root, src).Install(context.Background(), Options{Name: "svc", Vars: map[string]string{"Port": "9100"}}); err != nil {
+		t.Fatal(err)
+	}
+	if got := read(t, root, "Makefile"); got != "KITEX=v0.16 PORT=9100" {
+		t.Fatalf("install rendered %q", got)
+	}
+	// The template raises the version and changes the default port.
+	src.publish("2.0.0", vars("v0.17", "7777"), mk)
+	if _, err := inst(t, root, src).Update(context.Background(), Options{Name: "svc"}); err != nil {
+		t.Fatal(err)
+	}
+	if got := read(t, root, "Makefile"); got != "KITEX=v0.17 PORT=9100" {
+		t.Fatalf("after update %q; the version must follow the template, the port must stay as created", got)
+	}
+}
+
+func TestAVersionCannotBeChosenPerService(t *testing.T) {
+	src := &versioned{dir: t.TempDir()}
+	src.publish("1.0.0", vars("v0.16", "8888"), mk)
+	root := newProject(t)
+	err := inst(t, root, src).Install(context.Background(), Options{Name: "svc", Vars: map[string]string{"KitexVersion": "v0.15"}})
+	if err == nil || !strings.Contains(err.Error(), "KitexVersion cannot be set") || !strings.Contains(err.Error(), "KitexVersion=v0.16") {
+		t.Fatalf("install must refuse and name the team version, got %v", err)
+	}
+	if _, statErr := os.Stat(filepath.Join(root, "Makefile")); statErr == nil {
+		t.Fatal("nothing may be written when the request is refused")
+	}
 	if err := inst(t, root, src).Install(context.Background(), Options{Name: "svc"}); err != nil {
 		t.Fatal(err)
 	}
-	if got := read(t, root, "Makefile"); got != "KITEX=v0.16 PORT=8888" {
-		t.Fatalf("install rendered %q", got)
-	}
-	m, _ := manifest.Load(root)
-	if e := m.Components["svc"].Explicit; e == nil || len(e) != 0 {
-		t.Fatalf("nothing was chosen explicitly; Explicit must be an empty, non-nil list, got %#v", e)
-	}
-
-	// The template raises both defaults.
-	src.publish("2.0.0", vars("v0.17", "9999"), mk)
-	if _, err := inst(t, root, src).Update(context.Background(), Options{Name: "svc"}); err != nil {
-		t.Fatal(err)
-	}
-	if got := read(t, root, "Makefile"); got != "KITEX=v0.17 PORT=8888" {
-		t.Fatalf("after update %q; want the tracked KitexVersion to follow (v0.17) and Port to stay 8888", got)
+	if _, err := inst(t, root, src).Update(context.Background(), Options{Name: "svc", Vars: map[string]string{"KitexVersion": "v0.15"}}); err == nil {
+		t.Fatal("update must refuse as well")
 	}
 }
 
-func TestExplicitChoiceOfATrackedVariableIsKeptUntilReleased(t *testing.T) {
-	src := &versioned{t: t, dir: t.TempDir()}
+// Manifests written by devkit <= 0.1.8 stored the version (and 0.1.8 an
+// "explicit" list, possibly naming it as pinned). Both are simply overruled.
+func TestOldManifestsWithAStoredOrPinnedVersionAreBroughtInLine(t *testing.T) {
+	src := &versioned{dir: t.TempDir()}
 	src.publish("1.0.0", vars("v0.16", "8888"), mk)
+	src.publish("2.0.0", vars("v0.17", "8888"), mk)
 	root := newProject(t)
-	if err := inst(t, root, src).Install(context.Background(), Options{Name: "svc", Vars: map[string]string{"KitexVersion": "v0.15-pinned"}}); err != nil {
+	raw := `{"schema":1,"components":{"svc":{"version":"1.0.0","installedAt":"2026-09-20T00:00:00Z",
+	  "vars":{"KitexVersion":"v0.14-pinned-long-ago","Port":"7000"},"explicit":["KitexVersion","Port"],"files":{}}}}`
+	if err := os.WriteFile(manifest.FilePath(root), []byte(raw), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	src.publish("2.0.0", vars("v0.17", "8888"), mk)
 	if _, err := inst(t, root, src).Update(context.Background(), Options{Name: "svc"}); err != nil {
 		t.Fatal(err)
 	}
-	if got := read(t, root, "Makefile"); got != "KITEX=v0.15-pinned PORT=8888" {
-		t.Fatalf("a pinned version must survive the update, got %q", got)
+	if got := read(t, root, "Makefile"); got != "KITEX=v0.17 PORT=7000" {
+		t.Fatalf("got %q; an old pin must not survive, the port must", got)
 	}
-	// `--set KitexVersion=` releases the pin.
-	in := inst(t, root, src)
-	in.Force = true // same version again
-	if _, err := in.Update(context.Background(), Options{Name: "svc", Vars: map[string]string{"KitexVersion": ""}}); err != nil {
-		t.Fatal(err)
-	}
-	if got := read(t, root, "Makefile"); got != "KITEX=v0.17 PORT=8888" {
-		t.Fatalf("after releasing the pin got %q", got)
-	}
-	m, _ := manifest.Load(root)
-	for _, k := range m.Components["svc"].Explicit {
-		if k == "KitexVersion" {
-			t.Error("KitexVersion must no longer be listed as explicit")
-		}
-	}
-}
-
-// A manifest written by an older devkit stores every value and has no
-// "explicit" list. Which values were chosen is recovered from the defaults of
-// the version the service was created with.
-func TestLegacyManifestIsUnderstood(t *testing.T) {
-	src := &versioned{t: t, dir: t.TempDir()}
-	src.publish("1.0.0", vars("v0.16", "8888"), mk)
-	src.publish("2.0.0", vars("v0.17", "8888"), mk)
-
-	for _, c := range []struct{ name, storedKitex, want string }{
-		{"default merely applied", "v0.16", "KITEX=v0.17 PORT=7000"},
-		{"developer had pinned it", "v0.14-mine", "KITEX=v0.14-mine PORT=7000"},
-	} {
-		root := newProject(t)
-		m, _ := manifest.Load(root)
-		m.Components["svc"] = &manifest.Installed{Version: "1.0.0", Files: map[string]string{},
-			Vars: map[string]string{"KitexVersion": c.storedKitex, "Port": "7000"}} // Explicit is nil: legacy
-		m.Save()
-		if _, err := inst(t, root, src).Update(context.Background(), Options{Name: "svc"}); err != nil {
-			t.Fatal(err)
-		}
-		if got := read(t, root, "Makefile"); got != c.want {
-			t.Errorf("%s: got %q, want %q", c.name, got, c.want)
-		}
-		after, _ := manifest.Load(root)
-		if after.Components["svc"].Explicit == nil {
-			t.Errorf("%s: the manifest must be upgraded to carry an explicit list", c.name)
-		}
-	}
-
-	// If the old version cannot be fetched, do not guess: keep everything.
-	root := newProject(t)
-	m, _ := manifest.Load(root)
-	m.Components["svc"] = &manifest.Installed{Version: "0.9.0-gone", Files: map[string]string{},
-		Vars: map[string]string{"KitexVersion": "v0.16", "Port": "8888"}}
-	m.Save()
-	if _, err := inst(t, root, src).Update(context.Background(), Options{Name: "svc"}); err != nil {
-		t.Fatal(err)
-	}
-	if got := read(t, root, "Makefile"); got != "KITEX=v0.16 PORT=8888" {
-		t.Errorf("unknown old version: got %q, want the stored values kept", got)
+	after, _ := os.ReadFile(manifest.FilePath(root))
+	if strings.Contains(string(after), "explicit") {
+		t.Error("the obsolete explicit list should be gone after rewriting the manifest")
 	}
 }

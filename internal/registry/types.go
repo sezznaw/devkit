@@ -39,11 +39,13 @@ type Var struct {
 	Description string `json:"description,omitempty"`
 	Default     string `json:"default,omitempty"`
 	Required    bool   `json:"required,omitempty"`
-	// Track makes an existing service follow this variable's default when the
-	// template changes it (library and tool versions), unless the developer
-	// set the variable explicitly. Variables without Track keep the value the
-	// service was created with: a Port that silently changed in the managed
-	// Dockerfile would no longer match the developer's own conf/*.yaml.
+	// Track marks a value that is the same for every service and decided by
+	// the template alone: library and tool versions. It always takes the
+	// template's current default, on creation and on every update, and cannot
+	// be set per service or per project; a team runs one version.
+	// Variables without Track keep the value the service was created with: a
+	// Port that silently changed in the managed Dockerfile would no longer
+	// match the developer's own conf/*.yaml.
 	Track bool `json:"track,omitempty"`
 }
 

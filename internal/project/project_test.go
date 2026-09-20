@@ -27,3 +27,17 @@ func TestServicesFindsOnlyDevkitDirectories(t *testing.T) {
 		t.Fatalf("Services = %v, want [game user] (sorted, no idl/common/hidden)", got)
 	}
 }
+
+func TestRequiredVersion(t *testing.T) {
+	root := t.TempDir()
+	os.WriteFile(filepath.Join(root, "go.mod"), []byte("module x\n\ngo 1.24\n\nrequire (\n\tgithub.com/cloudwego/kitex v0.16.3\n\tgithub.com/cloudwego/kitexx v9.9.9 // indirect\n)\n\nrequire example.com/single v1.2.3\n"), 0o644)
+	if got := RequiredVersion(root, "github.com/cloudwego/kitex"); got != "v0.16.3" {
+		t.Errorf("block form: %q", got)
+	}
+	if got := RequiredVersion(root, "example.com/single"); got != "v1.2.3" {
+		t.Errorf("single-line form: %q", got)
+	}
+	if got := RequiredVersion(root, "example.com/absent"); got != "" {
+		t.Errorf("absent module: %q", got)
+	}
+}
