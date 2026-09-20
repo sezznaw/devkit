@@ -156,15 +156,19 @@ no `user.name`/`user.email` (new laptops, CI runners); without that the
 scaffold commit silently fails.
 
 **Project directory.** `<project>/devkit.yaml` (`workspace.Config`) carries
-the per-project settings (module_prefix, idl_repo, common_repo, component,
-go_private, vars) and is edited by hand; there is no command for it. ngs
+the per-project settings (module_prefix, idl_repo, component, go_private,
+vars) and is edited by hand; there is no command for it. ngs
 resolves the directory as `--workspace` > nearest `devkit.yaml` above cwd >
 global `workspace_dir` > cwd, and refuses to run from inside a service. Every
 setting has a default: `module_prefix` -> `workspace.DefaultModulePrefix`
 (the sanitised directory name, not the bare service name, so a service called
 `log` does not shadow the standard library), `idl_repo` -> a local `idl/`
 repository made by `workspace.EnsureLocalRepo` (nothing cloned, no pull
-warnings while it has no remote), `common_repo` -> `workspace.DefaultCommonRepo`.
+warnings while it has no remote). The common library is fixed
+(`workspace.DefaultCommonRepo`); a `common_repo` key is still parsed for
+forks of the framework but is intentionally absent from the template and the
+docs, because it only picks what is cloned into `common/` for reading while
+the real dependency is `CommonModule` in the template's go.mod.
 After a successful run ngs writes a commented `devkit.yaml`
 (`workspace.WriteTemplate`) if none exists, for discoverability and so that
 `workspace.Find` works from subdirectories. Precedence of values: flags >

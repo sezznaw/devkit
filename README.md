@@ -26,8 +26,8 @@ devkit ngs order
 
 No configuration is needed. With nothing set, the service's Go module is
 `shop/order` (directory name + service name), the project's shared IDL lives
-in a local git repository `./idl`, and the common library comes from
-`sezznaw/devkit-common`.
+in a local git repository `./idl`. The common library is always
+`sezznaw/devkit-common`; a copy is cloned to `./common` for reading.
 
 ```
 devkit ngs order
@@ -64,14 +64,12 @@ directory with its own `devkit.yaml`.
 # ~/work/shop/devkit.yaml  (every value is optional)
 module_prefix: "gitlab.yourcompany.com/shop"            # "order" becomes gitlab.yourcompany.com/shop/order
 idl_repo: "git@gitlab.yourcompany.com:shop/idl.git"     # or owner/repo on GitHub
-common_repo: ""                                         # default: sezznaw/devkit-common
 ```
 
 | Setting | When empty | Set it to |
 |---------|-----------|-----------|
 | `module_prefix` | `<directory name>`, e.g. `shop/order` | where the services' code will be hosted. Decide before creating many services: it is part of every import path |
 | `idl_repo` | a local `idl/` git repository is created, nothing is cloned | the project's shared IDL repository: `owner/repo` on GitHub or any full git URL (company GitLab, SSH or HTTPS). Costs nothing to set later |
-| `common_repo` | `sezznaw/devkit-common` | a fork of the common library |
 
 **Starting before you have a git server.** Leave `idl_repo` empty and work
 locally. Later, create the IDL project on your server and run, inside `idl/`:
@@ -241,7 +239,7 @@ also has an environment variable.
 | `devkit_repo` | `DEVKIT_REPO` | `owner/repo` publishing devkit releases (self-update) |
 | `github_token` | `DEVKIT_GITHUB_TOKEN` | needed for private repositories; lifts the API rate limit |
 | `github_host` | `DEVKIT_GITHUB_HOST` | GitHub Enterprise host, default `github.com` |
-| `module_prefix`, `idl_repo`, `common_repo`, `workspace_dir` | `DEVKIT_MODULE_PREFIX`, ... | machine-wide fallbacks for values a `devkit.yaml` leaves empty |
+| `module_prefix`, `idl_repo`, `workspace_dir` | `DEVKIT_MODULE_PREFIX`, ... | machine-wide fallbacks for values a `devkit.yaml` leaves empty |
 
 The GitHub token is only ever sent to the configured GitHub host; IDL
 repositories on other servers are cloned with your own git credentials.

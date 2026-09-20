@@ -54,8 +54,8 @@ Missing tools (Go, kitex, thriftgo) are installed automatically first; see
 
 Run it in your project directory. No configuration is required. Optional
 project settings live in devkit.yaml there (created on the first run):
-module_prefix (default: <directory name>), idl_repo (default: a local idl/
-git repository) and common_repo (default: the devkit common library).`,
+module_prefix (default: <directory name>) and idl_repo (default: a local idl/
+git repository).`,
 	Example: `  devkit ngs order
   devkit ngs order-item --module github.com/sezznaw/order-item
   devkit ngs order --set Port=9000 --skip-common`,

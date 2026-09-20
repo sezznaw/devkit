@@ -21,7 +21,7 @@ mkdir -p ~/work/shop && cd ~/work/shop
 devkit ngs order
 ```
 
-不需要任何配置。什么都不设置时，服务的 Go module 是 `shop/order`（目录名 + 服务名），项目共用的 IDL 放在本地 git 仓库 `./idl` 里，公共库使用 `sezznaw/devkit-common`。
+不需要任何配置。什么都不设置时，服务的 Go module 是 `shop/order`（目录名 + 服务名），项目共用的 IDL 放在本地 git 仓库 `./idl` 里。公共库固定是 `sezznaw/devkit-common`，会 clone 一份到 `./common` 供阅读。
 
 ```
 devkit ngs order
@@ -56,14 +56,12 @@ cd order && make run      # 使用 conf/dev.yaml 启动，本地不需要 Nacos
 # ~/work/shop/devkit.yaml （每一项都可以不填）
 module_prefix: "gitlab.yourcompany.com/shop"            # order 的 module 就是 gitlab.yourcompany.com/shop/order
 idl_repo: "git@gitlab.yourcompany.com:shop/idl.git"     # 或 GitHub 上的 owner/repo
-common_repo: ""                                         # 默认：sezznaw/devkit-common
 ```
 
 | 设置项 | 不填时 | 应该填什么 |
 |--------|--------|-----------|
 | `module_prefix` | 用目录名，如 `shop/order` | 服务代码将来托管的位置。它是每一行 import 的一部分，最好在建很多服务之前定下来 |
 | `idl_repo` | 在本地创建 `idl/` git 仓库，不拉取任何东西 | 项目共用的 IDL 仓库：GitHub 上的 `owner/repo`，或任意完整 git 地址（公司 GitLab，SSH 或 HTTPS 均可）。以后再填没有任何代价 |
-| `common_repo` | `sezznaw/devkit-common` | 公共库的 fork |
 
 **还没有 git 服务器时先开工。** `idl_repo` 留空，先在本地开发。之后在服务器上建好 IDL 项目，在 `idl/` 目录里执行：
 `git add -A && git commit -m "add idl" && git remote add origin <地址> && git push -u origin main`，
@@ -198,7 +196,7 @@ registry 仓库是私有的或配置不对。执行 `devkit config set github_to
 | `devkit_repo` | `DEVKIT_REPO` | 发布 devkit 的 `owner/repo`（自更新用） |
 | `github_token` | `DEVKIT_GITHUB_TOKEN` | 私有仓库需要；同时解除 API 限流 |
 | `github_host` | `DEVKIT_GITHUB_HOST` | GitHub Enterprise 地址，默认 `github.com` |
-| `module_prefix`、`idl_repo`、`common_repo`、`workspace_dir` | `DEVKIT_MODULE_PREFIX` 等 | `devkit.yaml` 里留空的值在本机的兜底值 |
+| `module_prefix`、`idl_repo`、`workspace_dir` | `DEVKIT_MODULE_PREFIX` 等 | `devkit.yaml` 里留空的值在本机的兜底值 |
 
 GitHub token 只会发送给配置的 GitHub 地址；其他服务器上的 IDL 仓库用你自己的 git 凭据 clone。
 

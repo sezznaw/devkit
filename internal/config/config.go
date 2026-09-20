@@ -46,7 +46,7 @@ type Config struct {
 }
 
 // Keys lists the settable config keys in display order.
-var Keys = []string{"github_host", "github_token", "registry_repo", "registry_dir", "devkit_repo", "workspace_dir", "module_prefix", "idl_repo", "common_repo"}
+var Keys = []string{"github_host", "github_token", "registry_repo", "registry_dir", "devkit_repo", "workspace_dir", "module_prefix", "idl_repo"}
 
 // Dir returns ~/.devkit, creating it if needed.
 func Dir() (string, error) {

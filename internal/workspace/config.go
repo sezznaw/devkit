@@ -14,7 +14,13 @@ import (
 // global ~/.devkit/config.yaml keeps only GitHub host and token.
 const ConfigFile = "devkit.yaml"
 
-// DefaultCommonRepo is the shared library used when a project does not name one.
+// DefaultCommonRepo is the shared library cloned to common/ for reading. It is
+// fixed for everyone using this framework. The `common_repo` key is still
+// parsed (forks of the whole framework need it) but is deliberately not
+// offered in the devkit.yaml template or the docs: it only chooses what is
+// cloned for reading, while the library a service really depends on is the
+// CommonModule in the template's go.mod, so offering it misled people into
+// thinking it swaps the library.
 const DefaultCommonRepo = "sezznaw/devkit-common"
 
 // Config is <workspace>/devkit.yaml.
@@ -22,7 +28,7 @@ type Config struct {
 	ModulePrefix string `yaml:"module_prefix,omitempty"`
 	// IdlRepo is "owner/repo" (or a git URL / local path) of the Thrift IDL repository.
 	IdlRepo string `yaml:"idl_repo,omitempty"`
-	// CommonRepo is "owner/repo" of the shared library, cloned for reference. Optional.
+	// CommonRepo overrides DefaultCommonRepo. Undocumented on purpose, see there.
 	CommonRepo string `yaml:"common_repo,omitempty"`
 	// GoPrivate marks the organisation's modules as private: ngs then adds
 	// <module_prefix org> to GOPRIVATE so `go get` bypasses proxy.golang.org.
@@ -97,12 +103,9 @@ func WriteTemplate(dir string, known *Config) error {
 		"#                services: owner/repo on GitHub, or any full git URL such as\n" +
 		"#                git@gitlab.yourcompany.com:shop/idl.git. Empty: a local idl/\n" +
 		"#                repository is created here; push it to a server when you have one.\n" +
-		"# common_repo    The shared library, cloned to common/ for reading.\n" +
-		"#                Empty: " + DefaultCommonRepo + "\n" +
 		"\n" +
 		"module_prefix: " + q(known.ModulePrefix) + "\n" +
 		"idl_repo: " + q(known.IdlRepo) + "\n" +
-		"common_repo: " + q(known.CommonRepo) + "\n" +
 		"\n" +
 		"# Uncomment if your Go modules are private (adds the organisation to GOPRIVATE):\n" +
 		"# go_private: true\n" +

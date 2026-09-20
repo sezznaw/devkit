@@ -3,6 +3,7 @@ package workspace
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -34,14 +35,19 @@ func TestFindAndLoadConfig(t *testing.T) {
 
 func TestWriteTemplateIsLoadableAndPrefilled(t *testing.T) {
 	dir := t.TempDir()
-	if err := WriteTemplate(dir, &Config{CommonRepo: "sezznaw/devkit-common"}); err != nil {
+	if err := WriteTemplate(dir, &Config{IdlRepo: "sezznaw/shop-idl", CommonRepo: "someone/fork"}); err != nil {
 		t.Fatal(err)
 	}
 	cfg, err := LoadConfig(dir)
 	if err != nil {
 		t.Fatalf("template must be valid YAML: %v", err)
 	}
-	if cfg.ModulePrefix != "" || cfg.IdlRepo != "" || cfg.CommonRepo != "sezznaw/devkit-common" || cfg.GoPrivate {
+	if cfg.ModulePrefix != "" || cfg.IdlRepo != "sezznaw/shop-idl" || cfg.GoPrivate {
 		t.Errorf("unexpected template values: %+v", cfg)
+	}
+	// The common library is fixed; the template must not offer it as a setting.
+	raw, _ := os.ReadFile(filepath.Join(dir, ConfigFile))
+	if strings.Contains(string(raw), "common_repo") || cfg.CommonRepo != "" {
+		t.Errorf("template must not mention common_repo:\n%s", raw)
 	}
 }
