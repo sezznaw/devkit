@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"text/tabwriter"
 
@@ -14,6 +15,7 @@ import (
 	"github.com/sezznaw/devkit/internal/installer"
 	"github.com/sezznaw/devkit/internal/manifest"
 	"github.com/sezznaw/devkit/internal/project"
+	"github.com/sezznaw/devkit/internal/registry"
 	"github.com/sezznaw/devkit/internal/ui"
 	"github.com/sezznaw/devkit/internal/workspace"
 )
@@ -67,6 +69,7 @@ Files you own (go.mod, idl.mk, conf/, handler/) are never touched.`,
 		}
 
 		var failed, merged []string
+		var notes []registry.ChangeEntry
 		updated, current := 0, 0
 		for _, root := range roots {
 			name := filepath.Base(root)
@@ -85,6 +88,7 @@ Files you own (go.mod, idl.mk, conf/, handler/) are never touched.`,
 				for _, f := range in.LastSkipped {
 					merged = append(merged, filepath.Join(name, f))
 				}
+				notes = mergeNotes(notes, in.LastNotes)
 			}
 			if err != nil {
 				if single {
@@ -96,6 +100,7 @@ Files you own (go.mod, idl.mk, conf/, handler/) are never touched.`,
 			}
 		}
 		if single {
+			printNotes(notes)
 			return nil
 		}
 
@@ -110,11 +115,66 @@ Files you own (go.mod, idl.mk, conf/, handler/) are never touched.`,
 				fmt.Printf("  %s\n", f)
 			}
 		}
+		printNotes(notes)
 		if len(failed) > 0 {
 			return fmt.Errorf("%d service(s) could not be updated", len(failed))
 		}
 		return nil
 	},
+}
+
+// mergeNotes adds entries not seen yet (several services usually move through
+// the same versions; the notes are printed once).
+func mergeNotes(have, more []registry.ChangeEntry) []registry.ChangeEntry {
+	for _, e := range more {
+		dup := false
+		for _, h := range have {
+			if h.Version == e.Version {
+				dup = true
+				break
+			}
+		}
+		if !dup {
+			have = append(have, e)
+		}
+	}
+	sort.SliceStable(have, func(i, j int) bool { return registry.CompareVersions(have[i].Version, have[j].Version) < 0 })
+	return have
+}
+
+// printNotes tells the developer what the update brought, and above all what
+// it could not do for them: files they own are never rewritten, so new
+// settings only reach them through this text.
+func printNotes(notes []registry.ChangeEntry) {
+	if len(notes) == 0 {
+		return
+	}
+	fmt.Println("\nwhat changed:")
+	for _, e := range notes {
+		fmt.Printf("  %s\n", e.Version)
+		for _, c := range e.Changes {
+			fmt.Printf("    - %s\n", c)
+		}
+	}
+	first := true
+	for _, e := range notes {
+		for _, a := range e.Action {
+			if first {
+				fmt.Println("\nyour own files are never rewritten; you may want to:")
+				first = false
+			}
+			for i, line := range strings.Split(a, "\n") {
+				if i == 0 {
+					fmt.Printf("  * [%s] %s\n", e.Version, line)
+				} else {
+					fmt.Printf("      %s\n", line)
+				}
+			}
+		}
+	}
+	if !first {
+		fmt.Println("\nevery setting is documented in conf/README.md of each service.")
+	}
 }
 
 // updateScope returns the services to operate on. single is true when the

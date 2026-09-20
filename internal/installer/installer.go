@@ -30,6 +30,10 @@ type Installer struct {
 	// Output receives hook output; defaults to stdout/stderr.
 	Output io.Writer
 
+	// LastNotes is the changelog between the previously installed version
+	// and the one the most recent Update moved to.
+	LastNotes []registry.ChangeEntry
+
 	// LastSkipped lists the files the most recent Install/Update left alone
 	// because they were modified locally (a .new copy was written for each).
 	LastSkipped []string
@@ -148,9 +152,11 @@ func (in *Installer) Update(ctx context.Context, opts Options) (bool, error) {
 	}
 
 	in.Log("updating %s %s -> %s", name, old.Version, comp.Version)
+	from := old.Version
 	if err := in.apply(comp, dir, vars, old, comp.Hooks.PostUpdate, "post_update"); err != nil {
 		return false, err
 	}
+	in.LastNotes = comp.ChangesBetween(from, comp.Version)
 	return true, nil
 }
 

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"gopkg.in/yaml.v3"
 )
@@ -94,25 +95,82 @@ func WriteTemplate(dir string, known *Config) error {
 		return err
 	}
 	q := func(s string) string { return fmt.Sprintf("%q", s) }
-	content := "# devkit project settings. Every value is optional: `devkit ngs <service>` works as is.\n" +
-		"#\n" +
-		"# module_prefix  Go module prefix of your services. A service \"order\" becomes\n" +
-		"#                <module_prefix>/order. Set it to where the code will live, e.g.\n" +
-		"#                gitlab.yourcompany.com/shop. Empty: <this directory's name>/order.\n" +
-		"# idl_repo       Git repository holding this project's Thrift IDLs, shared by all\n" +
-		"#                services: owner/repo on GitHub, or any full git URL such as\n" +
-		"#                git@gitlab.yourcompany.com:shop/idl.git. Empty: a local idl/\n" +
-		"#                repository is created here; push it to a server when you have one.\n" +
-		"\n" +
-		"module_prefix: " + q(known.ModulePrefix) + "\n" +
-		"idl_repo: " + q(known.IdlRepo) + "\n" +
-		"\n" +
-		"# Uncomment if your Go modules are private (adds the organisation to GOPRIVATE):\n" +
-		"# go_private: true\n" +
-		"\n" +
-		"# Default template variables for new services:\n" +
-		"# vars:\n" +
-		"#   NacosAddr: 127.0.0.1:8848\n" +
-		"#   Port: \"8888\"\n"
+	content := strings.Join([]string{
+		"# devkit project settings / devkit 项目设置",
+		"#",
+		"# This file belongs to the project directory, next to your services. Every",
+		"# value is optional: `devkit ngs <service>` works with all of them empty.",
+		"# 本文件放在项目目录下，与各个服务同级。每一项都可以不填：",
+		"# 全部留空时 `devkit ngs <服务名>` 也能正常工作。",
+		"",
+		"# ---------------------------------------------------------------------------",
+		"# module_prefix",
+		"#   The Go module path of a new service is <module_prefix>/<service>. Set it",
+		"#   to where the code will be hosted, for example",
+		"#       gitlab.yourcompany.com/shop   ->  gitlab.yourcompany.com/shop/order",
+		"#   Empty: the name of this directory is used (shop/order).",
+		"#   It becomes part of every import line, so choose it before creating many",
+		"#   services. Changing it later means a search-and-replace in each service.",
+		"#",
+		"#   新服务的 Go module 路径是 <module_prefix>/<服务名>。应填代码将来托管的位置，例如",
+		"#       gitlab.yourcompany.com/shop   ->  gitlab.yourcompany.com/shop/order",
+		"#   留空：使用本目录的名字（shop/order）。",
+		"#   它会出现在每一行 import 里，最好在建很多服务之前定下来；之后再改，",
+		"#   需要在每个服务里做一次全局替换。",
+		"# ---------------------------------------------------------------------------",
+		"module_prefix: " + q(known.ModulePrefix),
+		"",
+		"# ---------------------------------------------------------------------------",
+		"# idl_repo",
+		"#   The git repository holding the Thrift IDLs of ALL services of this project.",
+		"#   It is cloned to ./idl; every service generates code from it, which is how",
+		"#   one service can call another. Accepts:",
+		"#       owner/repo                                   (on GitHub)",
+		"#       git@gitlab.yourcompany.com:shop/idl.git      (any full git URL, SSH)",
+		"#       https://gitlab.yourcompany.com/shop/idl.git  (any full git URL, HTTPS)",
+		"#   Empty: a local git repository ./idl is created and nothing is cloned.",
+		"#   You can work like that and push ./idl to a server later; setting this",
+		"#   value afterwards costs nothing.",
+		"#",
+		"#   存放本项目【所有服务】Thrift IDL 的 git 仓库。它会被 clone 到 ./idl，",
+		"#   每个服务都从这里生成代码，服务之间能够互相调用靠的就是它。可以填：",
+		"#       owner/repo                                   （GitHub 上的仓库）",
+		"#       git@gitlab.yourcompany.com:shop/idl.git      （任意完整 git 地址，SSH）",
+		"#       https://gitlab.yourcompany.com/shop/idl.git  （任意完整 git 地址，HTTPS）",
+		"#   留空：在本地创建 git 仓库 ./idl，不 clone 任何东西。可以先这样开发，",
+		"#   以后再把 ./idl 推到服务器；之后补填这一项没有任何代价。",
+		"# ---------------------------------------------------------------------------",
+		"idl_repo: " + q(known.IdlRepo),
+		"",
+		"# ---------------------------------------------------------------------------",
+		"# go_private  (default false / 默认 false)",
+		"#   Set to true when your Go modules are private. `devkit ngs` then adds the",
+		"#   organisation part of module_prefix to GOPRIVATE, so `go get` fetches them",
+		"#   with your git credentials instead of the public Go proxy.",
+		"#   当你的 Go module 是私有仓库时设为 true。`devkit ngs` 会把 module_prefix 的",
+		"#   组织部分加入 GOPRIVATE，`go get` 就会用你的 git 凭据拉取，而不走公共代理。",
+		"# ---------------------------------------------------------------------------",
+		"# go_private: true",
+		"",
+		"# ---------------------------------------------------------------------------",
+		"# vars",
+		"#   Default values for the variables of the service template, applied to every",
+		"#   service created here (a --set flag on the command line still wins).",
+		"#   服务模板变量的默认值，对在本目录下创建的每个服务生效（命令行的 --set 优先）。",
+		"#",
+		"#     Port       listen port written to conf/*.yaml          default \"8888\"",
+		"#                写入 conf/*.yaml 的监听端口",
+		"#     NacosAddr  Nacos address written to conf/dev.yaml      default 127.0.0.1:8848",
+		"#                写入 conf/dev.yaml 的 Nacos 地址",
+		"#     CI         which pipeline file to generate: github, gitlab, both, none",
+		"#                default: decided from module_prefix / idl_repo",
+		"#                生成哪种 CI 配置；默认根据 module_prefix / idl_repo 的域名判断",
+		"# ---------------------------------------------------------------------------",
+		"# vars:",
+		"#   Port: \"8888\"",
+		"#   NacosAddr: 127.0.0.1:8848",
+		"#   CI: gitlab",
+		"",
+	}, "\n")
 	return os.WriteFile(filepath.Join(dir, ConfigFile), []byte(content), 0o644)
 }
