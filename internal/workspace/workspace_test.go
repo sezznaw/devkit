@@ -38,7 +38,7 @@ func TestEnsureRepoCloneThenPull(t *testing.T) {
 	ws := t.TempDir()
 	dst := filepath.Join(ws, "idl")
 	quiet := func(string, ...any) {}
-	if err := EnsureRepo(ctx, dst, src, "", quiet); err != nil {
+	if err := EnsureRepo(ctx, dst, src, "", "", quiet); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := os.Stat(filepath.Join(dst, "a.txt")); err != nil {
@@ -52,7 +52,7 @@ func TestEnsureRepoCloneThenPull(t *testing.T) {
 	if out, err := git(ctx, src, "", "-c", "user.name=t", "-c", "user.email=t@example.com", "commit", "-q", "-m", "b"); err != nil {
 		t.Fatalf("%v: %s", err, out)
 	}
-	if err := EnsureRepo(ctx, dst, src, "", quiet); err != nil {
+	if err := EnsureRepo(ctx, dst, src, "", "", quiet); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := os.Stat(filepath.Join(dst, "b.txt")); err != nil {
@@ -61,7 +61,7 @@ func TestEnsureRepoCloneThenPull(t *testing.T) {
 	// A plain directory that is not a checkout is an error.
 	plain := filepath.Join(ws, "plain")
 	os.MkdirAll(plain, 0o755)
-	if err := EnsureRepo(ctx, plain, src, "", quiet); err == nil {
+	if err := EnsureRepo(ctx, plain, src, "", "", quiet); err == nil {
 		t.Fatal("expected error for non-git directory")
 	}
 }
@@ -107,5 +107,69 @@ func TestInitRepoWithoutGitIdentity(t *testing.T) {
 	}
 	if want := "devkit <devkit@users.noreply.github.com> scaffold"; !strings.Contains(out, want) {
 		t.Errorf("log = %q, want it to contain %q", out, want)
+	}
+}
+
+func TestTokenIsOnlySentToItsOwnHost(t *testing.T) {
+	cases := []struct {
+		url, host string
+		want      bool
+	}{
+		{"https://github.com/sezznaw/idl.git", "", true},
+		{"https://github.com/sezznaw/idl.git", "github.com", true},
+		{"https://ghe.corp.com/a/b.git", "https://ghe.corp.com/", true},
+		{"https://gitlab.corp.com/a/b.git", "", false},
+		{"https://github.com.evil.io/a/b.git", "", false},
+		{"http://github.com/a/b.git", "", false},
+		{"git@github.com:a/b.git", "", false},
+		{"/local/path", "", false},
+	}
+	for _, c := range cases {
+		if got := TokenAllowedFor(c.url, c.host); got != c.want {
+			t.Errorf("TokenAllowedFor(%q, %q) = %v, want %v", c.url, c.host, got, c.want)
+		}
+	}
+}
+
+func TestEnsureLocalRepoAndNoRemoteIsQuiet(t *testing.T) {
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("git not installed")
+	}
+	ctx := context.Background()
+	dir := filepath.Join(t.TempDir(), "idl")
+	var logs []string
+	logf := func(f string, a ...any) { logs = append(logs, f) }
+	if err := EnsureLocalRepo(ctx, dir, logf); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(filepath.Join(dir, ".git")); err != nil {
+		t.Fatal("idl/ must be a git repository")
+	}
+	if err := EnsureLocalRepo(ctx, dir, logf); err != nil { // idempotent
+		t.Fatal(err)
+	}
+	// A repo without remotes must not produce a pull warning.
+	logs = nil
+	if err := EnsureRepo(ctx, dir, "git@gitlab.example.com:x/idl.git", "", "", logf); err != nil {
+		t.Fatal(err)
+	}
+	for _, l := range logs {
+		if strings.Contains(l, "warning") {
+			t.Errorf("unexpected warning for a remote-less repo: %q", l)
+		}
+	}
+}
+
+func TestDefaultModulePrefix(t *testing.T) {
+	cases := map[string]string{
+		"/Users/me/Work/indie-game": "indie-game",
+		"/tmp/My Project":           "my-project",
+		"/tmp/---":                  "app",
+		"/tmp/shop_v2.1":            "shop_v2.1",
+	}
+	for in, want := range cases {
+		if got := DefaultModulePrefix(in); got != want {
+			t.Errorf("DefaultModulePrefix(%q) = %q, want %q", in, got, want)
+		}
 	}
 }

@@ -5,9 +5,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## What this is
 
 `devkit` is a Go CLI (cobra) whose job is one user flow: `curl install.sh | sh`,
-fill three values into `devkit.yaml` in the project directory, then
-`devkit ngs <service>` produces a complete runnable Kitex (Thrift) service with
-all tools installed. `devkit update` later upgrades the scaffolding. Templates
+`cd` into the project directory, `devkit ngs <service>` produces a complete
+runnable Kitex (Thrift) service with all tools installed. It needs zero
+configuration; `devkit.yaml` in the project directory is optional. `devkit update` later upgrades the scaffolding. Templates
 live in a separate git repo, `devkit-registry` (sibling checkout at
 `../devkit-registry`), fetched from GitHub; shared runtime code is the Go
 module `github.com/sezznaw/devkit-common` (GitHub repo `sezznaw/devkit-common`,
@@ -150,11 +150,26 @@ scaffold commit silently fails.
 the per-project settings (module_prefix, idl_repo, common_repo, component,
 go_private, vars) and is edited by hand; there is no command for it. ngs
 resolves the directory as `--workspace` > nearest `devkit.yaml` above cwd >
-global `workspace_dir` > cwd, and refuses to run from inside a service. When
-the required values are missing and no `devkit.yaml` exists it writes a
-commented template (`workspace.WriteTemplate`) and stops with instructions;
-when the file exists but is incomplete it names the missing keys. Precedence
-of values: flags > devkit.yaml > global config / env. One machine, several
+global `workspace_dir` > cwd, and refuses to run from inside a service. Every
+setting has a default: `module_prefix` -> `workspace.DefaultModulePrefix`
+(the sanitised directory name, not the bare service name, so a service called
+`log` does not shadow the standard library), `idl_repo` -> a local `idl/`
+repository made by `workspace.EnsureLocalRepo` (nothing cloned, no pull
+warnings while it has no remote), `common_repo` -> `workspace.DefaultCommonRepo`.
+After a successful run ngs writes a commented `devkit.yaml`
+(`workspace.WriteTemplate`) if none exists, for discoverability and so that
+`workspace.Find` works from subdirectories. Precedence of values: flags >
+devkit.yaml > global config / env > defaults.
+
+Projects may live on another git server (the owner's services and IDL are on
+a company GitLab while devkit itself is on GitHub): `idl_repo` accepts any
+full git URL and `module_prefix` any host. `workspace.TokenAllowedFor` makes
+sure the GitHub token is only ever sent over https to the configured GitHub
+host. `workspace.ValidateServiceName` rejects names measured to break the
+build (Go keywords and builtins, `main`, `init`, `internal`, `vendor`,
+`handler`, and the project directories `idl`/`common`). Known gap: the
+template only ships a GitHub Actions workflow; services hosted on GitLab get
+no usable CI file yet. One machine, several
 projects, one global config: that is the reason this layer exists.
 
 **deps + ui.** `internal/deps.Ensure` is what makes "curl install, then ngs"

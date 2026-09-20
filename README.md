@@ -15,32 +15,19 @@ installs the tools the service needs and keeps the scaffolding up to date.
 curl -fsSL https://raw.githubusercontent.com/sezznaw/devkit/main/install.sh | sh
 ```
 
-**2. Tell devkit about your project**
+**2. Create a service**
 
-Go to the directory that will hold your project's services and run `ngs` once.
-devkit creates a `devkit.yaml` there for you to fill in:
+Go to the directory that holds (or will hold) your project's services and run:
 
 ```sh
 mkdir -p ~/work/shop && cd ~/work/shop
-devkit ngs order        # first run: creates devkit.yaml and stops
-```
-
-```yaml
-# ~/work/shop/devkit.yaml
-module_prefix: "github.com/sezznaw"    # a service "order" becomes github.com/sezznaw/order
-idl_repo: "sezznaw/shop-idl"           # this project's Thrift IDL repository
-common_repo: "sezznaw/devkit-common"          # shared library (optional, cloned for reading)
-```
-
-These three values are all devkit needs to know, and they are what makes it
-work for any project: another project is simply another directory with its own
-`devkit.yaml`.
-
-**3. Create the service**
-
-```sh
 devkit ngs order
 ```
+
+No configuration is needed. With nothing set, the service's Go module is
+`shop/order` (directory name + service name), the project's shared IDL lives
+in a local git repository `./idl`, and the common library comes from
+`sezznaw/devkit-common`.
 
 ```
 devkit ngs order
@@ -67,11 +54,36 @@ cd order && make run      # starts with conf/dev.yaml, no Nacos needed locally
 
 Every further service in the same project is just `devkit ngs <name>`.
 
+**3. Optional: project settings**
+
+The first run writes a commented `devkit.yaml` next to your services. Edit it
+when you know where the code will live; another project is simply another
+directory with its own `devkit.yaml`.
+
+```yaml
+# ~/work/shop/devkit.yaml  (every value is optional)
+module_prefix: "gitlab.yourcompany.com/shop"            # "order" becomes gitlab.yourcompany.com/shop/order
+idl_repo: "git@gitlab.yourcompany.com:shop/idl.git"     # or owner/repo on GitHub
+common_repo: ""                                         # default: sezznaw/devkit-common
+```
+
+| Setting | When empty | Set it to |
+|---------|-----------|-----------|
+| `module_prefix` | `<directory name>`, e.g. `shop/order` | where the services' code will be hosted. Decide before creating many services: it is part of every import path |
+| `idl_repo` | a local `idl/` git repository is created, nothing is cloned | the project's shared IDL repository: `owner/repo` on GitHub or any full git URL (company GitLab, SSH or HTTPS). Costs nothing to set later |
+| `common_repo` | `sezznaw/devkit-common` | a fork of the common library |
+
+**Starting before you have a git server.** Leave `idl_repo` empty and work
+locally. Later, create the IDL project on your server and run, inside `idl/`:
+`git add -A && git commit -m "add idl" && git remote add origin <url> && git push -u origin main`,
+then put `<url>` into `idl_repo` so teammates get the same IDLs. The shared
+`idl/` repository is what lets every service generate clients for the others.
+
 ## What you get
 
 ```
 ~/work/shop/
-  devkit.yaml               project settings (the three values above)
+  devkit.yaml               optional project settings
   idl/                      clone of the IDL repository; order/order.thrift was added for you
   common/                   clone of the shared library, for reading
   order/
@@ -129,9 +141,12 @@ and never touched again. For the managed files:
 
 ## Troubleshooting
 
-**`this directory has no project settings yet`**
-Expected on the first run: fill in the `devkit.yaml` that was created and run
-the command again.
+**`"handler" cannot be used as a service name`**
+Some names cannot become a compiling Go service: Go keywords and built-ins
+(`map`, `type`, `string`, `error`, `new`, ...), `main`, `init`, `internal`,
+`vendor`, `handler` (clashes inside Kitex's generated code), and `idl` /
+`common`, which are directories of the project. Pick another name, for example
+`handler-svc`.
 
 **`you are inside the service ...`**
 `ngs` was started from within a service. `cd` to the project directory
@@ -170,7 +185,10 @@ also has an environment variable.
 | `devkit_repo` | `DEVKIT_REPO` | `owner/repo` publishing devkit releases (self-update) |
 | `github_token` | `DEVKIT_GITHUB_TOKEN` | needed for private repositories; lifts the API rate limit |
 | `github_host` | `DEVKIT_GITHUB_HOST` | GitHub Enterprise host, default `github.com` |
-| `module_prefix`, `idl_repo`, `common_repo`, `workspace_dir` | `DEVKIT_MODULE_PREFIX`, ... | fallbacks when a directory has no `devkit.yaml` |
+| `module_prefix`, `idl_repo`, `common_repo`, `workspace_dir` | `DEVKIT_MODULE_PREFIX`, ... | machine-wide fallbacks for values a `devkit.yaml` leaves empty |
+
+The GitHub token is only ever sent to the configured GitHub host; IDL
+repositories on other servers are cloned with your own git credentials.
 
 `devkit.yaml` additionally accepts `go_private: true`, `component: <name>`
 (scaffold from another registry component) and `vars:` (default template

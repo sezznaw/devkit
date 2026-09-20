@@ -12,29 +12,16 @@
 curl -fsSL https://raw.githubusercontent.com/sezznaw/devkit/main/install.sh | sh
 ```
 
-**2. 告诉 devkit 你的项目信息**
+**2. 创建服务**
 
-进入用来放项目服务的目录，先执行一次 `ngs`。devkit 会在那里生成一份 `devkit.yaml` 让你填写：
+进入用来放（或将要放）项目服务的目录，执行：
 
 ```sh
 mkdir -p ~/work/shop && cd ~/work/shop
-devkit ngs order        # 第一次执行：生成 devkit.yaml 后停止
-```
-
-```yaml
-# ~/work/shop/devkit.yaml
-module_prefix: "github.com/sezznaw"    # 服务 order 的 module 就是 github.com/sezznaw/order
-idl_repo: "sezznaw/shop-idl"           # 本项目的 Thrift IDL 仓库
-common_repo: "sezznaw/devkit-common"          # 共享库（可选，clone 下来供阅读）
-```
-
-devkit 只需要知道这三个值，也正因为如此它可以用于任何项目：另一个项目就是另一个目录，里面放它自己的 `devkit.yaml`。
-
-**3. 创建服务**
-
-```sh
 devkit ngs order
 ```
+
+不需要任何配置。什么都不设置时，服务的 Go module 是 `shop/order`（目录名 + 服务名），项目共用的 IDL 放在本地 git 仓库 `./idl` 里，公共库使用 `sezznaw/devkit-common`。
 
 ```
 devkit ngs order
@@ -61,11 +48,32 @@ cd order && make run      # 使用 conf/dev.yaml 启动，本地不需要 Nacos
 
 同一个项目里之后再建服务，只需要 `devkit ngs <名字>`。
 
+**3. 可选：项目设置**
+
+第一次执行会在服务旁边生成一份带注释的 `devkit.yaml`。等你确定代码放在哪里之后再编辑它；另一个项目就是另一个目录，里面放它自己的 `devkit.yaml`。
+
+```yaml
+# ~/work/shop/devkit.yaml （每一项都可以不填）
+module_prefix: "gitlab.yourcompany.com/shop"            # order 的 module 就是 gitlab.yourcompany.com/shop/order
+idl_repo: "git@gitlab.yourcompany.com:shop/idl.git"     # 或 GitHub 上的 owner/repo
+common_repo: ""                                         # 默认：sezznaw/devkit-common
+```
+
+| 设置项 | 不填时 | 应该填什么 |
+|--------|--------|-----------|
+| `module_prefix` | 用目录名，如 `shop/order` | 服务代码将来托管的位置。它是每一行 import 的一部分，最好在建很多服务之前定下来 |
+| `idl_repo` | 在本地创建 `idl/` git 仓库，不拉取任何东西 | 项目共用的 IDL 仓库：GitHub 上的 `owner/repo`，或任意完整 git 地址（公司 GitLab，SSH 或 HTTPS 均可）。以后再填没有任何代价 |
+| `common_repo` | `sezznaw/devkit-common` | 公共库的 fork |
+
+**还没有 git 服务器时先开工。** `idl_repo` 留空，先在本地开发。之后在服务器上建好 IDL 项目，在 `idl/` 目录里执行：
+`git add -A && git commit -m "add idl" && git remote add origin <地址> && git push -u origin main`，
+再把 `<地址>` 填进 `idl_repo`，同事就能拿到同一份 IDL。共用的 `idl/` 仓库正是让每个服务都能为其他服务生成客户端代码的基础。
+
 ## 生成的内容
 
 ```
 ~/work/shop/
-  devkit.yaml               项目设置（上面那三个值）
+  devkit.yaml               可选的项目设置
   idl/                      IDL 仓库的 clone；已替你加好 order/order.thrift
   common/                   共享库的 clone，供阅读
   order/
@@ -116,8 +124,8 @@ echo 'source "$HOME/.devkit/env"' >> ~/.zshrc    # 或 ~/.bashrc
 
 ## 常见问题
 
-**`this directory has no project settings yet`**
-第一次执行时的正常提示：填好生成的 `devkit.yaml`，再执行一次命令。
+**`"handler" cannot be used as a service name`**
+有些名字无法生成可编译的 Go 服务：Go 的关键字和内置标识符（`map`、`type`、`string`、`error`、`new` 等）、`main`、`init`、`internal`、`vendor`、`handler`（与 Kitex 生成的代码内部冲突），以及项目目录已占用的 `idl` 和 `common`。换一个名字即可，例如 `handler-svc`。
 
 **`you are inside the service ...`**
 你在某个服务目录内部执行了 `ngs`。回到项目目录（含 `devkit.yaml` 的那一层）。
@@ -147,7 +155,9 @@ registry 仓库是私有的或配置不对。执行 `devkit config set github_to
 | `devkit_repo` | `DEVKIT_REPO` | 发布 devkit 的 `owner/repo`（自更新用） |
 | `github_token` | `DEVKIT_GITHUB_TOKEN` | 私有仓库需要；同时解除 API 限流 |
 | `github_host` | `DEVKIT_GITHUB_HOST` | GitHub Enterprise 地址，默认 `github.com` |
-| `module_prefix`、`idl_repo`、`common_repo`、`workspace_dir` | `DEVKIT_MODULE_PREFIX` 等 | 目录里没有 `devkit.yaml` 时的兜底值 |
+| `module_prefix`、`idl_repo`、`common_repo`、`workspace_dir` | `DEVKIT_MODULE_PREFIX` 等 | `devkit.yaml` 里留空的值在本机的兜底值 |
+
+GitHub token 只会发送给配置的 GitHub 地址；其他服务器上的 IDL 仓库用你自己的 git 凭据 clone。
 
 `devkit.yaml` 另外还支持 `go_private: true`、`component: <名称>`（换用 registry 里的其他组件）和 `vars:`（默认模板变量，如 `NacosAddr`）。
 

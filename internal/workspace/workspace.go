@@ -40,8 +40,16 @@ func IsLocal(url string) bool {
 
 // EnsureRepo clones url into dir if dir does not exist, otherwise fast-forwards it.
 // A failed pull is reported through log but is not fatal: the checkout is still usable.
-func EnsureRepo(ctx context.Context, dir, url, token string, log func(string, ...any)) error {
+//
+// token is only ever sent to tokenHost (the GitHub host devkit is configured
+// for). Repositories on any other server, such as a company GitLab, are cloned
+// with the user's own git credentials and never see the token.
+func EnsureRepo(ctx context.Context, dir, url, token, tokenHost string, log func(string, ...any)) error {
 	if _, err := os.Stat(filepath.Join(dir, ".git")); err == nil {
+		if !hasUpstream(ctx, dir) {
+			log("using local %s (no remote configured yet)", dir)
+			return nil
+		}
 		log("updating %s", dir)
 		if out, err := git(ctx, dir, "", "pull", "--ff-only", "--quiet"); err != nil {
 			log("  warning: git pull failed (%v): %s", err, strings.TrimSpace(out))
@@ -56,7 +64,7 @@ func EnsureRepo(ctx context.Context, dir, url, token string, log func(string, ..
 	if err == nil {
 		return nil
 	}
-	if token == "" || IsLocal(url) || !strings.HasPrefix(url, "http") {
+	if token == "" || !TokenAllowedFor(url, tokenHost) {
 		return fmt.Errorf("git clone %s: %w\n%s", url, err, strings.TrimSpace(out))
 	}
 	// Retry with the devkit token; the header is passed on the command line
@@ -69,6 +77,64 @@ func EnsureRepo(ctx context.Context, dir, url, token string, log func(string, ..
 		return fmt.Errorf("git clone %s: %w\n%s", url, err, strings.TrimSpace(out))
 	}
 	return nil
+}
+
+// TokenAllowedFor reports whether the GitHub token may be sent to url: only
+// over https and only to tokenHost itself.
+func TokenAllowedFor(url, tokenHost string) bool {
+	tokenHost = strings.TrimPrefix(strings.TrimPrefix(strings.TrimRight(tokenHost, "/"), "https://"), "http://")
+	if tokenHost == "" {
+		tokenHost = "github.com"
+	}
+	return strings.HasPrefix(url, "https://"+tokenHost+"/")
+}
+
+// EnsureLocalRepo makes dir a git repository without any remote. It is what
+// ngs uses for idl/ when the project has no idl_repo yet: work starts locally
+// and the directory is pushed to a git server later.
+func EnsureLocalRepo(ctx context.Context, dir string, log func(string, ...any)) error {
+	if _, err := os.Stat(filepath.Join(dir, ".git")); err == nil {
+		log("using local %s", dir)
+		return nil
+	}
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return err
+	}
+	if out, err := git(ctx, dir, "", "init", "--quiet", "-b", "main"); err != nil {
+		return fmt.Errorf("git init %s: %w\n%s", dir, err, strings.TrimSpace(out))
+	}
+	log("created local git repository %s (set idl_repo in devkit.yaml and push it when you have a server)", dir)
+	return nil
+}
+
+// hasUpstream reports whether the checkout has any remote to pull from.
+func hasUpstream(ctx context.Context, dir string) bool {
+	out, err := git(ctx, dir, "", "remote")
+	return err == nil && strings.TrimSpace(out) != ""
+}
+
+// DefaultModulePrefix derives a module prefix from the project directory name
+// for projects that have not chosen one: ~/Work/indie-game -> "indie-game".
+// Using the directory rather than the bare service name keeps a service called
+// "log" or "time" from colliding with the Go standard library.
+func DefaultModulePrefix(projectDir string) string {
+	base := filepath.Base(projectDir)
+	var b strings.Builder
+	for _, r := range base {
+		switch {
+		case r >= 'a' && r <= 'z', r >= '0' && r <= '9', r == '-', r == '_', r == '.':
+			b.WriteRune(r)
+		case r >= 'A' && r <= 'Z':
+			b.WriteRune(r + ('a' - 'A'))
+		default:
+			b.WriteRune('-')
+		}
+	}
+	p := strings.Trim(b.String(), "-._")
+	if p == "" {
+		return "app"
+	}
+	return p
 }
 
 func git(ctx context.Context, dir, extraHeader string, args ...string) (string, error) {

@@ -52,9 +52,10 @@ var ngsCmd = &cobra.Command{
 Missing tools (Go, kitex, thriftgo) are installed automatically first; see
 'devkit doctor'.
 
-Run it in your project directory. The project's settings live in devkit.yaml
-there (module_prefix, idl_repo, common_repo); on the first run in a new
-directory ngs creates that file for you to fill in.`,
+Run it in your project directory. No configuration is required. Optional
+project settings live in devkit.yaml there (created on the first run):
+module_prefix (default: <directory name>), idl_repo (default: a local idl/
+git repository) and common_repo (default: the devkit common library).`,
 	Example: `  devkit ngs order
   devkit ngs order-item --module github.com/sezznaw/order-item
   devkit ngs order --set Port=9000 --skip-common`,
@@ -66,6 +67,9 @@ directory ngs creates that file for you to fill in.`,
 
 func runNgs(ctx context.Context, name string) error {
 	if err := registry.ValidateName(name); err != nil {
+		return err
+	}
+	if err := workspace.ValidateServiceName(name); err != nil {
 		return err
 	}
 	cfg, err := config.Load()
@@ -89,29 +93,10 @@ func runNgs(ctx context.Context, name string) error {
 	if err != nil {
 		return err
 	}
-	// Project settings: devkit.yaml wins over the global config.
-	modulePrefix := firstNonEmpty(ws.ModulePrefix, cfg.ModulePrefix)
-	idlRepo := firstNonEmpty(ws.IdlRepo, cfg.IdlRepo)
-	commonRepo := firstNonEmpty(ws.CommonRepo, cfg.CommonRepo)
-
-	// First run in a new project directory: hand the user a settings file to fill in.
-	if (modulePrefix == "" && ngsFlags.module == "") || (idlRepo == "" && !ngsFlags.skipIdl) {
-		file := filepath.Join(wsDir, workspace.ConfigFile)
-		if _, statErr := os.Stat(file); os.IsNotExist(statErr) {
-			if err := workspace.WriteTemplate(wsDir, &workspace.Config{ModulePrefix: modulePrefix, IdlRepo: idlRepo, CommonRepo: commonRepo}); err != nil {
-				return err
-			}
-			return fmt.Errorf("this directory has no project settings yet.\n\n  I created %s\n  Fill in module_prefix, idl_repo and common_repo, then run `devkit ngs %s` again", file, name)
-		}
-		var missing []string
-		if modulePrefix == "" {
-			missing = append(missing, "module_prefix")
-		}
-		if idlRepo == "" {
-			missing = append(missing, "idl_repo")
-		}
-		return fmt.Errorf("%s is incomplete: set %s, then run `devkit ngs %s` again", file, strings.Join(missing, " and "), name)
-	}
+	// Project settings: devkit.yaml wins over the global config. All optional.
+	modulePrefix := firstNonEmpty(ws.ModulePrefix, cfg.ModulePrefix, workspace.DefaultModulePrefix(wsDir))
+	idlRepo := firstNonEmpty(ws.IdlRepo, cfg.IdlRepo) // empty: local idl/ repository
+	commonRepo := firstNonEmpty(ws.CommonRepo, cfg.CommonRepo, workspace.DefaultCommonRepo)
 
 	module := ngsFlags.module
 	if module == "" {
@@ -192,16 +177,19 @@ func runNgs(ctx context.Context, name string) error {
 			s.Log("skipped (--skip-idl)")
 			return nil
 		}
-		return workspace.EnsureRepo(ctx, idlDir, workspace.RepoURL(cfg.GitHubHost, idlRepo), cfg.GitHubToken, s.Logf)
+		if idlRepo == "" {
+			return workspace.EnsureLocalRepo(ctx, idlDir, s.Logf)
+		}
+		return workspace.EnsureRepo(ctx, idlDir, workspace.RepoURL(cfg.GitHubHost, idlRepo), cfg.GitHubToken, cfg.GitHubHost, s.Logf)
 	}); err != nil {
 		return fail(err)
 	}
 	if err := r.Step("Preparing common library checkout", func(s *ui.Step) error {
-		if ngsFlags.skipCommon || commonRepo == "" {
+		if ngsFlags.skipCommon {
 			s.Log("skipped")
 			return nil
 		}
-		if err := workspace.EnsureRepo(ctx, filepath.Join(wsDir, "common"), workspace.RepoURL(cfg.GitHubHost, commonRepo), cfg.GitHubToken, s.Logf); err != nil {
+		if err := workspace.EnsureRepo(ctx, filepath.Join(wsDir, "common"), workspace.RepoURL(cfg.GitHubHost, commonRepo), cfg.GitHubToken, cfg.GitHubHost, s.Logf); err != nil {
 			s.Log("warning: %v", err)
 		}
 		if ws.GoPrivate {
@@ -276,6 +264,14 @@ func runNgs(ctx context.Context, name string) error {
 		return fail(err)
 	}
 
+	settings := filepath.Join(wsDir, workspace.ConfigFile)
+	createdSettings := false
+	if _, statErr := os.Stat(settings); os.IsNotExist(statErr) {
+		if err := workspace.WriteTemplate(wsDir, &workspace.Config{ModulePrefix: ws.ModulePrefix, IdlRepo: ws.IdlRepo, CommonRepo: ws.CommonRepo}); err == nil {
+			createdSettings = true
+		}
+	}
+
 	r.Done("service %s created at %s", name, svcDir)
 	fmt.Println()
 	if hint := deps.PathHint(statuses); hint != "" {
@@ -284,10 +280,18 @@ func runNgs(ctx context.Context, name string) error {
 	}
 	fmt.Println("next steps:")
 	fmt.Printf("  cd %s && make run     # starts with conf/dev.yaml (Nacos disabled)\n", svcDir)
-	if !ngsFlags.skipIdl {
-		fmt.Printf("  open a pull request in the IDL repository for idl/%s/%s.thrift\n", name, name)
+	switch {
+	case ngsFlags.skipIdl:
+	case idlRepo == "":
+		fmt.Printf("  the IDL is in %s, a local git repository; when you have a git server,\n", idlDir)
+		fmt.Printf("  push it there and put its address into idl_repo in %s\n", settings)
+	default:
+		fmt.Printf("  commit and push idl/%s/%s.thrift to the IDL repository so others can use it\n", name, name)
 	}
-	fmt.Printf("  create the GitHub repository %s and push\n", module)
+	fmt.Printf("  create the remote repository for %s and push the service\n", module)
+	if createdSettings {
+		fmt.Printf("\nproject settings (all optional) were written to %s\n", settings)
+	}
 	return nil
 }
 

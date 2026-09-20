@@ -14,6 +14,9 @@ import (
 // global ~/.devkit/config.yaml keeps only GitHub host and token.
 const ConfigFile = "devkit.yaml"
 
+// DefaultCommonRepo is the shared library used when a project does not name one.
+const DefaultCommonRepo = "sezznaw/devkit-common"
+
 // Config is <workspace>/devkit.yaml.
 type Config struct {
 	ModulePrefix string `yaml:"module_prefix,omitempty"`
@@ -85,18 +88,23 @@ func WriteTemplate(dir string, known *Config) error {
 		return err
 	}
 	q := func(s string) string { return fmt.Sprintf("%q", s) }
-	content := "# devkit project settings. Fill in the values, then run: devkit ngs <service>\n" +
+	content := "# devkit project settings. Every value is optional: `devkit ngs <service>` works as is.\n" +
 		"#\n" +
-		"# module_prefix  Go module prefix of your services. A service named \"order\" becomes\n" +
-		"#                <module_prefix>/order, e.g. github.com/sezznaw/order\n" +
-		"# idl_repo       owner/repo of this project's Thrift IDL repository on GitHub\n" +
-		"# common_repo    owner/repo of the shared common library (optional, cloned for reading)\n" +
+		"# module_prefix  Go module prefix of your services. A service \"order\" becomes\n" +
+		"#                <module_prefix>/order. Set it to where the code will live, e.g.\n" +
+		"#                gitlab.yourcompany.com/shop. Empty: <this directory's name>/order.\n" +
+		"# idl_repo       Git repository holding this project's Thrift IDLs, shared by all\n" +
+		"#                services: owner/repo on GitHub, or any full git URL such as\n" +
+		"#                git@gitlab.yourcompany.com:shop/idl.git. Empty: a local idl/\n" +
+		"#                repository is created here; push it to a server when you have one.\n" +
+		"# common_repo    The shared library, cloned to common/ for reading.\n" +
+		"#                Empty: " + DefaultCommonRepo + "\n" +
 		"\n" +
 		"module_prefix: " + q(known.ModulePrefix) + "\n" +
 		"idl_repo: " + q(known.IdlRepo) + "\n" +
 		"common_repo: " + q(known.CommonRepo) + "\n" +
 		"\n" +
-		"# Uncomment if these repositories are private (adds the organisation to GOPRIVATE):\n" +
+		"# Uncomment if your Go modules are private (adds the organisation to GOPRIVATE):\n" +
 		"# go_private: true\n" +
 		"\n" +
 		"# Default template variables for new services:\n" +
