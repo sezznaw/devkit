@@ -217,18 +217,22 @@ renders numbered steps: spinner + ✓/✗ + duration on a TTY, plain lines when
 `Step.Progress()` draws download bars. `ngs` is written as seven `r.Step`
 calls; `devkit doctor` is the standalone entry.
 
-**Which values an update reuses.** The manifest stores all rendered `vars`
-plus `explicit`, the names somebody chose (`--set`, `devkit.yaml` vars, what
-ngs computes). On `Update`, a var declared `"track": true` in the *new*
-component and not in `explicit` is dropped from the reused values, so the new
-template default applies; everything else is reused as stored. `--set Name=`
-on a tracked var releases the pin. Manifests from before v0.1.8 have no
-`explicit` (nil): `Installer.explicitVars` fetches the component version the
-service was created with and treats a stored value equal to that version's
-default as not chosen; if that version cannot be fetched it keeps everything.
-Do not "simplify" this to "never store defaults": untracked values such as
-`Port` must stay frozen because they also live in the developer's `once`
-files.
+**Which values an update reuses, and team versions.** The manifest stores the
+`vars` a service was rendered with; `Update` reuses them, except those the
+*new* component declares `"track": true`, which always come from the template.
+Tracked vars are the team's versions (Go, Kitex, thriftgo, common); the owner
+decided that a team runs exactly one of each, so `rejectTracked` refuses them
+in `--set` and in `devkit.yaml` `vars:`, in `Install` and in `Update`, and the
+refusal happens before the "already up to date" early return so it is never
+silently ignored. There is deliberately no pinning and no escape hatch; v0.1.8
+briefly had one (an `explicit` list in the manifest) and it was removed. Do
+not "simplify" to "never store defaults": untracked values such as `Port` must
+stay frozen because they also live in the developer's `once` files.
+Enforcement around it: `deps.Ensure` replaces a kitex/thriftgo of another
+version (one binary per machine), `doctor` reads the team's versions from the
+newest template (`teamVersions`), and `update --check` shows each service's
+real Kitex version from its `go.mod` (`project.RequiredVersion`). Both
+generators print their version on stderr.
 
 **Telling developers what changed.** `once` files cannot receive new settings,
 so components carry a `changelog` (`registry.ChangeEntry`: version, changes,

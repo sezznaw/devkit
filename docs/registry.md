@@ -65,14 +65,14 @@ the installed version against.
   project's *path*, `CI` as `github`/`gitlab`/`both`, `GoPrivate`), by
   `vars:` in `devkit.yaml`, or by `--set Name=value`. The values used at
   install time are stored in the service's manifest and reused by `update`.
-* A var with `"track": true` follows the template: when a new template
-  version changes its default, existing services get the new value on
-  `devkit update`, unless someone set it explicitly (`--set`, `vars:` in
-  `devkit.yaml`), in which case it stays pinned until released with
-  `--set Name=`. Use it for library and tool versions. Vars without `track`
-  keep the value the service was created with, which is right for anything
-  that also appears in files the developer owns (a `Port` that changed in the
-  managed Dockerfile would no longer match their `conf/*.yaml`).
+* A var with `"track": true` is a team-wide value decided by the template:
+  it always renders as the newest template's default, at creation and on
+  every `devkit update`, and devkit refuses any attempt to set it (`--set`,
+  `vars:` in `devkit.yaml`). Use it for versions: Go, Kitex, thriftgo, the
+  common library. Vars without `track` keep the value the service was created
+  with, which is right for anything that also appears in files the developer
+  owns (a `Port` that changed in the managed Dockerfile would no longer match
+  their `conf/*.yaml`).
 * `deps` are other components installed first (latest version).
 * Hooks run with `sh -c` in the service directory and may use template variables.
 * `changelog` has one entry per version: `changes` says what is different,

@@ -132,7 +132,7 @@ echo 'source "$HOME/.devkit/env"' >> ~/.zshrc    # 或 ~/.bashrc
 | `devkit ngs <服务名>` | 在当前项目目录下创建服务 |
 | `devkit update` | 把 devkit 管理的文件（Makefile、CI、Dockerfile、`main.go`）升级到最新模板。在服务目录内执行只更新该服务；在项目目录下执行则更新全部服务。`--check` 只显示版本和本地改动 |
 | `devkit self-update` | 升级 devkit 自身。`--check` 只报告 |
-| `devkit doctor` | 查看 git、Go、kitex、thriftgo 的状态。`--fix` 安装缺失的工具 |
+| `devkit doctor` | 对照团队版本查看 git、Go、kitex、thriftgo 的状态。`--fix` 安装缺失的工具，并替换版本不对的生成器 |
 | `devkit version` | 报问题时提供版本信息 |
 
 **颜色。** 在终端里 devkit 用颜色标出重点：绿色表示成功，红色表示失败，黄色表示需要你留意的内容（被跳过的文件、有新版本、需要手动处理的事项），加粗是标题，灰色是次要信息（例如 `go mod tidy` 的输出）。输出被重定向、在 CI 里或设置了 `DEVKIT_PLAIN=1` 时是纯文本；`NO_COLOR=1` 只去掉颜色；`CLICOLOR_FORCE=1` 在管道里也保留颜色，比如配合 `less -R`。
@@ -176,9 +176,16 @@ your own files are never rewritten; you may want to:
 
 每个服务里的 `conf/README.md` 由 devkit 管理，始终列出该服务当前版本支持的全部配置项及其默认值。
 
-### 版本号跟随模板
+### 全团队统一版本
 
-库和工具的版本（`KitexVersion`、`ThriftgoVersion`、`CommonVersion`）不会在创建服务时被固化：模板调高它们之后，`devkit update` 也会在你的服务里调高。想为某个服务锁定版本，执行 `devkit update --set KitexVersion=v0.16.3`；想恢复跟随模板，执行 `devkit update --force --set KitexVersion=`。同时存在于你自己文件里的值，比如 `Port`，始终保持创建时的样子。
+所有服务使用相同的 Go、Kitex、thriftgo 和 common 库版本。它们只在一个地方决定，也就是服务模板，并由 devkit 强制执行：
+
+- 新建的服务直接使用团队的版本。这些版本不能按服务或按项目单独指定：`--set KitexVersion=...` 以及 `devkit.yaml` 里的 `vars:` 对它们都会被拒绝。
+- `devkit update` 会把已有服务拉齐：Makefile 里的生成器版本、Dockerfile 和 CI 里的 Go 镜像、`go.mod` 里的 Kitex 和 common 版本。
+- `devkit update --check` 会显示每个服务实际编译用的 Kitex 版本，和团队版本不一致时以黄色标出并列出团队版本。
+- 代码生成器每台机器只有一份。`ngs` 和 `devkit doctor --fix` 会替换掉版本不对的 `kitex` 或 `thriftgo`，`make gen` 遇到版本不对的生成器也会拒绝执行，保证所有人生成的代码一致。
+
+同时存在于你自己文件里的值，比如 `Port`，保持创建时的样子。
 
 ### `update` 如何处理你的文件
 

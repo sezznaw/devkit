@@ -164,7 +164,7 @@ echo 'source "$HOME/.devkit/env"' >> ~/.zshrc    # or ~/.bashrc
 | `devkit ngs <service>` | create a service in the current project directory |
 | `devkit update` | upgrade the devkit-managed files (Makefile, CI, Dockerfile, `main.go`) to the latest template. Inside a service it updates that service; in the project directory it updates every service. `--check` only shows versions and local changes |
 | `devkit self-update` | upgrade devkit itself. `--check` only reports |
-| `devkit doctor` | show the state of git, Go, kitex, thriftgo. `--fix` installs what is missing |
+| `devkit doctor` | show the state of git, Go, kitex, thriftgo against the team's versions. `--fix` installs what is missing and replaces a generator of another version |
 | `devkit version` | version info for bug reports |
 
 **Colours.** On a terminal devkit marks where to look: green for success,
@@ -220,14 +220,24 @@ your own files are never rewritten; you may want to:
 `conf/README.md` in every service is managed by devkit and always lists every
 setting the service's version supports, with defaults.
 
-### Versions follow the template
+### One version for the whole team
 
-Library and tool versions (`KitexVersion`, `ThriftgoVersion`,
-`CommonVersion`) are not frozen when a service is created: when the template
-raises them, `devkit update` raises them in your service too. To pin one for a
-service run `devkit update --set KitexVersion=v0.16.3`; to go back to following
-the template, `devkit update --force --set KitexVersion=`. Values that also
-live in your own files, such as `Port`, always stay as created.
+Every service uses the same Go, Kitex, thriftgo and common library version.
+They are decided in one place, the service template, and devkit enforces them:
+
+- A new service gets the team's versions. They cannot be chosen per service or
+  per project: `--set KitexVersion=...` and `vars:` in `devkit.yaml` are
+  refused for them.
+- `devkit update` brings an existing service in line: the generator versions
+  in the Makefile, the Go image in the Dockerfile and CI, and the Kitex and
+  common versions in `go.mod`.
+- `devkit update --check` shows the Kitex version each service really builds
+  with, in yellow next to the team's when they differ.
+- The code generators are one installation per machine. `ngs` and
+  `devkit doctor --fix` replace a `kitex` or `thriftgo` of another version,
+  and `make gen` refuses to run with one, so everyone generates the same code.
+
+Values that also live in your own files, such as `Port`, stay as created.
 
 ### What `update` does to your files
 
