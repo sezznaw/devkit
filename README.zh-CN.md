@@ -77,8 +77,9 @@ idl_repo: "git@gitlab.yourcompany.com:shop/idl.git"     # 或 GitHub 上的 owne
   order/
     cmd/order/main.go       用 common 启动 Kitex：Nacos、日志、配置
     handler/handler.go      你的 RPC 实现
-    conf/dev.yaml           本地配置，关闭 Nacos 注册
+    conf/dev.yaml           本地配置，关闭 Nacos 注册；每个配置项都有说明
     conf/prod.yaml          生产配置，密钥来自 ${环境变量}
+    conf/README.md          全部配置项的参考文档，由 devkit 保持最新
     kitex_gen/              生成的代码，已被 git 忽略
     idl.mk                  本服务要为哪些 IDL 生成代码（归你编辑）
     Makefile                tools / gen / build / run / test / docker
@@ -152,9 +153,27 @@ modified locally, not overwritten; merge the .new copy by hand or rerun with --f
 
 "服务"指由 devkit 创建的那些子目录，`idl/` 和 `common/` 不会被碰。某个服务更新失败不会中断其他服务。在项目目录下使用 `--force` 时，devkit 会先列出即将被覆盖的、你改过的文件并要求确认（`--yes` 跳过询问）。
 
+### 如何知道一次更新带来了什么
+
+你的配置文件永远不会被改写，所以更新没有办法替你往里面加新的配置项，而是改为告诉你。更新结束后，devkit 会列出你经过的每个版本改了什么，以及你可能需要手动做什么：
+
+```
+what changed:
+  0.3.0
+    - graceful stop: keeps serving after leaving Nacos, configurable drain time, ...
+
+your own files are never rewritten; you may want to:
+  * [0.3.0] Optional, in each conf/<env>.yaml (defaults are 3s and 15s) ...
+      shutdown:
+        deregister_wait: 3s
+        drain_timeout: 15s
+```
+
+每个服务里的 `conf/README.md` 由 devkit 管理，始终列出该服务当前版本支持的全部配置项及其默认值。
+
 ### `update` 如何处理你的文件
 
-归你所有的文件（`go.mod`、`idl.mk`、`conf/*`、`handler/*`、`README.md`）只创建一次，之后永远不会被碰。对于 devkit 管理的文件：
+归你所有的文件（`go.mod`、`idl.mk`、`conf/*.yaml`、`handler/*`、`README.md`）只创建一次，之后永远不会被碰。对于 devkit 管理的文件：
 
 | 你的文件 | `devkit update` | 加 `--force` |
 |---------|-----------------|--------------|

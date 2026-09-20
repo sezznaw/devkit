@@ -52,7 +52,12 @@ the installed version against.
     "post_install": ["make gen && go mod tidy"],
     "post_update":  ["go mod tidy"]
   },
-  "once": ["go.mod", "conf/*", "handler/*", "README.md"]
+  "once": ["go.mod", "conf/*.yaml", "handler/*", "README.md"],
+  "changelog": [
+    { "version": "0.3.0",
+      "changes": ["graceful stop settings"],
+      "action":  ["Optional, in conf/<env>.yaml:\nshutdown:\n  drain_timeout: 15s"] }
+  ]
 }
 ```
 
@@ -62,6 +67,12 @@ the installed version against.
   install time are stored in the service's manifest and reused by `update`.
 * `deps` are other components installed first (latest version).
 * Hooks run with `sh -c` in the service directory and may use template variables.
+* `changelog` has one entry per version: `changes` says what is different,
+  `action` what the developer may want to do by hand (multi-line strings are
+  printed as an indented block, so include the exact snippet). `devkit update`
+  prints the entries between the installed and the new version. It exists
+  because `once` files are never rewritten: a new config setting reaches
+  existing services only through an `action`.
 * `once` lists glob patterns (matched against the service-relative path) of
   files written on first install only. They are not recorded in the manifest,
   so `update` never touches them. Use it for everything the developer owns

@@ -87,8 +87,9 @@ then put `<url>` into `idl_repo` so teammates get the same IDLs. The shared
   order/
     cmd/order/main.go       starts Kitex with Nacos, logging and config from common
     handler/handler.go      your RPC implementations
-    conf/dev.yaml           local config, Nacos registration disabled
+    conf/dev.yaml           local config, Nacos registration disabled; every setting explained
     conf/prod.yaml          production config, secrets from ${ENV_VARS}
+    conf/README.md          reference of all settings, kept up to date by devkit
     kitex_gen/              generated code, git-ignored
     idl.mk                  which IDLs this service generates code for (yours to edit)
     Makefile                tools / gen / build / run / test / docker
@@ -181,9 +182,30 @@ never touched. A service that fails does not stop the others. With `--force`
 in the project directory devkit first lists the modified files it is about to
 overwrite and asks for confirmation (`--yes` skips the question).
 
+### Learning what an update brought
+
+Your config files are never rewritten, so an update cannot add a new setting
+to them. Instead it tells you. After updating, devkit prints what changed in
+each version you moved through and what you may want to do by hand:
+
+```
+what changed:
+  0.3.0
+    - graceful stop: keeps serving after leaving Nacos, configurable drain time, ...
+
+your own files are never rewritten; you may want to:
+  * [0.3.0] Optional, in each conf/<env>.yaml (defaults are 3s and 15s) ...
+      shutdown:
+        deregister_wait: 3s
+        drain_timeout: 15s
+```
+
+`conf/README.md` in every service is managed by devkit and always lists every
+setting the service's version supports, with defaults.
+
 ### What `update` does to your files
 
-Files you own (`go.mod`, `idl.mk`, `conf/*`, `handler/*`, `README.md`) are created once
+Files you own (`go.mod`, `idl.mk`, `conf/*.yaml`, `handler/*`, `README.md`) are created once
 and never touched again. For the managed files:
 
 | Your file | `devkit update` | with `--force` |

@@ -206,6 +206,13 @@ renders numbered steps: spinner + ✓/✗ + duration on a TTY, plain lines when
 `Step.Progress()` draws download bars. `ngs` is written as seven `r.Step`
 calls; `devkit doctor` is the standalone entry.
 
+**Telling developers what changed.** `once` files cannot receive new settings,
+so components carry a `changelog` (`registry.ChangeEntry`: version, changes,
+action). `Installer.Update` stores `ChangesBetween(old, new)` in `LastNotes`;
+`cmd/update.go:printNotes` prints them once per run (merged across services),
+with the manual actions called out. `registry.CompareVersions` is numeric per
+dotted part, so 0.10.0 sorts after 0.9.0.
+
 **Write-once files.** `component.json` `once` globs (`go.mod`, `idl.mk`,
 `conf/*`, `handler/*`, ...) are split off the plan in `installer.apply` before
 `applyPlan`: created if absent, never tracked, updated or removed. Anything a
