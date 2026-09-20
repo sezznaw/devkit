@@ -33,10 +33,16 @@ type Manifest struct {
 }
 
 type Installed struct {
-	Version     string            `json:"version"`
-	InstalledAt time.Time         `json:"installedAt"`
-	Vars        map[string]string `json:"vars,omitempty"`
-	Deps        []string          `json:"deps,omitempty"`
+	Version     string    `json:"version"`
+	InstalledAt time.Time `json:"installedAt"`
+	// Vars are the values the files were last rendered with (all of them, for
+	// the record). Explicit names the ones somebody chose, as opposed to
+	// template defaults that merely applied at the time; only for those does a
+	// tracked variable resist a new template default. A nil Explicit marks a
+	// manifest written before this distinction existed.
+	Vars     map[string]string `json:"vars,omitempty"`
+	Explicit []string          `json:"explicit"`
+	Deps     []string          `json:"deps,omitempty"`
 	// Files maps project-relative path (slash separated) to "sha256:<hex>".
 	Files map[string]string `json:"files"`
 }

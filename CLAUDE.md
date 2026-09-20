@@ -217,6 +217,19 @@ renders numbered steps: spinner + ✓/✗ + duration on a TTY, plain lines when
 `Step.Progress()` draws download bars. `ngs` is written as seven `r.Step`
 calls; `devkit doctor` is the standalone entry.
 
+**Which values an update reuses.** The manifest stores all rendered `vars`
+plus `explicit`, the names somebody chose (`--set`, `devkit.yaml` vars, what
+ngs computes). On `Update`, a var declared `"track": true` in the *new*
+component and not in `explicit` is dropped from the reused values, so the new
+template default applies; everything else is reused as stored. `--set Name=`
+on a tracked var releases the pin. Manifests from before v0.1.8 have no
+`explicit` (nil): `Installer.explicitVars` fetches the component version the
+service was created with and treats a stored value equal to that version's
+default as not chosen; if that version cannot be fetched it keeps everything.
+Do not "simplify" this to "never store defaults": untracked values such as
+`Port` must stay frozen because they also live in the developer's `once`
+files.
+
 **Telling developers what changed.** `once` files cannot receive new settings,
 so components carry a `changelog` (`registry.ChangeEntry`: version, changes,
 action). `Installer.Update` stores `ChangesBetween(old, new)` in `LastNotes`;

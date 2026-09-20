@@ -176,6 +176,10 @@ your own files are never rewritten; you may want to:
 
 每个服务里的 `conf/README.md` 由 devkit 管理，始终列出该服务当前版本支持的全部配置项及其默认值。
 
+### 版本号跟随模板
+
+库和工具的版本（`KitexVersion`、`ThriftgoVersion`、`CommonVersion`）不会在创建服务时被固化：模板调高它们之后，`devkit update` 也会在你的服务里调高。想为某个服务锁定版本，执行 `devkit update --set KitexVersion=v0.16.3`；想恢复跟随模板，执行 `devkit update --force --set KitexVersion=`。同时存在于你自己文件里的值，比如 `Port`，始终保持创建时的样子。
+
 ### `update` 如何处理你的文件
 
 归你所有的文件（`go.mod`、`idl.mk`、`app/*`、`conf/*.yaml`、`handler/*`、`README.md`）只创建一次，之后永远不会被碰。对于 devkit 管理的文件：

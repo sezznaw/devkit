@@ -30,6 +30,10 @@ type Installer struct {
 	// Output receives hook output; defaults to stdout/stderr.
 	Output io.Writer
 
+	// pendingExplicit carries the names of explicitly chosen variables from
+	// Install/Update into apply, which writes the manifest.
+	pendingExplicit map[string]bool
+
 	// LastNotes is the changelog between the previously installed version
 	// and the one the most recent Update moved to.
 	LastNotes []registry.ChangeEntry
@@ -105,6 +109,10 @@ func (in *Installer) install(ctx context.Context, idx *registry.Index, opts Opti
 	}
 
 	in.Log("installing %s@%s", name, comp.Version)
+	in.pendingExplicit = map[string]bool{}
+	for k := range opts.Vars {
+		in.pendingExplicit[k] = true
+	}
 	if err := in.apply(comp, dir, opts.Vars, old, comp.Hooks.PostInstall, "post_install"); err != nil {
 		return err
 	}
@@ -142,14 +150,27 @@ func (in *Installer) Update(ctx context.Context, opts Options) (bool, error) {
 		}
 	}
 
-	// Reuse the answers given at install time; --set overrides them.
+	// Reuse what the service was created with; --set overrides it. Tracked
+	// variables nobody chose explicitly follow the new template default.
+	explicit := in.explicitVars(ctx, name, old)
 	vars := map[string]string{}
 	for k, v := range old.Vars {
+		if d := comp.VarByName(k); d != nil && d.Track && !explicit[k] {
+			continue
+		}
 		vars[k] = v
 	}
 	for k, v := range opts.Vars {
+		if d := comp.VarByName(k); v == "" && d != nil && d.Track {
+			// `--set KitexVersion=` means: stop pinning, follow the template again.
+			delete(vars, k)
+			delete(explicit, k)
+			continue
+		}
 		vars[k] = v
+		explicit[k] = true
 	}
+	in.pendingExplicit = explicit
 
 	in.Log("updating %s %s -> %s", name, old.Version, comp.Version)
 	from := old.Version
@@ -229,6 +250,7 @@ func (in *Installer) apply(comp *registry.Component, dir string, userVars map[st
 		Version:     comp.Version,
 		InstalledAt: time.Now().UTC(),
 		Vars:        userVarsOnly(comp, vars),
+		Explicit:    sortedKeys(in.pendingExplicit, comp),
 		Deps:        comp.Deps,
 		Files:       hashes,
 	}
@@ -384,6 +406,48 @@ func declared(comp *registry.Component, name string) bool {
 		}
 	}
 	return false
+}
+
+// explicitVars returns the variables of an installed component that somebody
+// chose. New manifests record them. For one written before that, compare each
+// stored value with the default of the version that produced it: equal means
+// the default merely applied, different means it was chosen. If that old
+// version cannot be fetched, every stored value counts as chosen, which keeps
+// today's behaviour instead of guessing.
+func (in *Installer) explicitVars(ctx context.Context, name string, old *manifest.Installed) map[string]bool {
+	out := map[string]bool{}
+	if old.Explicit != nil {
+		for _, k := range old.Explicit {
+			out[k] = true
+		}
+		return out
+	}
+	prev, _, err := in.fetch(ctx, name, old.Version)
+	if err != nil || prev.Version != old.Version {
+		for k := range old.Vars {
+			out[k] = true
+		}
+		return out
+	}
+	for k, v := range old.Vars {
+		if d := prev.VarByName(k); d == nil || d.Default != v {
+			out[k] = true
+		}
+	}
+	return out
+}
+
+// sortedKeys lists the explicit variables the component declares, sorted, and
+// never nil: an empty list still says "this manifest knows the distinction".
+func sortedKeys(set map[string]bool, comp *registry.Component) []string {
+	out := []string{}
+	for k := range set {
+		if comp.VarByName(k) != nil {
+			out = append(out, k)
+		}
+	}
+	sort.Strings(out)
+	return out
 }
 
 func userVarsOnly(comp *registry.Component, vars map[string]string) map[string]string {

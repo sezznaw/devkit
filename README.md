@@ -220,6 +220,15 @@ your own files are never rewritten; you may want to:
 `conf/README.md` in every service is managed by devkit and always lists every
 setting the service's version supports, with defaults.
 
+### Versions follow the template
+
+Library and tool versions (`KitexVersion`, `ThriftgoVersion`,
+`CommonVersion`) are not frozen when a service is created: when the template
+raises them, `devkit update` raises them in your service too. To pin one for a
+service run `devkit update --set KitexVersion=v0.16.3`; to go back to following
+the template, `devkit update --force --set KitexVersion=`. Values that also
+live in your own files, such as `Port`, always stay as created.
+
 ### What `update` does to your files
 
 Files you own (`go.mod`, `idl.mk`, `app/*`, `conf/*.yaml`, `handler/*`, `README.md`) are created once
