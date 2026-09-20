@@ -3,6 +3,8 @@
 // Rules:
 //   - Paths may contain Go template expressions, e.g. files/internal/{{.Service}}/server.go.
 //   - Files ending in ".tmpl" are rendered with text/template and the suffix is dropped.
+//     A template that renders to only whitespace produces no file, which lets a
+//     component ship files that exist only for some variable values.
 //   - Every other file is copied verbatim.
 package render
 
@@ -71,6 +73,11 @@ func BuildFrom(filesDir string, vars map[string]string) (*Plan, error) {
 			rendered, err := renderString(relSrc, string(content), vars)
 			if err != nil {
 				return err
+			}
+			if strings.TrimSpace(rendered) == "" {
+				// Conditional file: the whole template sits inside an {{if}}
+				// that was false. Produce no file rather than an empty one.
+				return nil
 			}
 			content = []byte(rendered)
 		}

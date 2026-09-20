@@ -71,3 +71,21 @@ func TestPascalAndFuncs(t *testing.T) {
 		t.Errorf("got %q", out)
 	}
 }
+
+func TestEmptyRenderedTemplateProducesNoFile(t *testing.T) {
+	src := t.TempDir()
+	write(t, filepath.Join(src, "files", "a.yml.tmpl"), "{{if eq .CI \"gitlab\"}}stages: [build]\n{{end}}")
+	write(t, filepath.Join(src, "files", "b.yml.tmpl"), "{{if eq .CI \"github\"}}name: ci\n{{end}}")
+	write(t, filepath.Join(src, "files", "empty.txt"), "")
+	plan, err := Build(src, map[string]string{"CI": "gitlab"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var got []string
+	for _, f := range plan.Files {
+		got = append(got, f.Rel)
+	}
+	if len(got) != 2 || got[0] != "a.yml" || got[1] != "empty.txt" {
+		t.Fatalf("files = %v; want [a.yml empty.txt] (verbatim empty files are kept, empty templates are not)", got)
+	}
+}

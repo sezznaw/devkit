@@ -167,9 +167,18 @@ full git URL and `module_prefix` any host. `workspace.TokenAllowedFor` makes
 sure the GitHub token is only ever sent over https to the configured GitHub
 host. `workspace.ValidateServiceName` rejects names measured to break the
 build (Go keywords and builtins, `main`, `init`, `internal`, `vendor`,
-`handler`, and the project directories `idl`/`common`). Known gap: the
-template only ships a GitHub Actions workflow; services hosted on GitLab get
-no usable CI file yet. One machine, several
+`handler`, and the project directories `idl`/`common`).
+
+CI follows the hosting platform: `workspace.DetectCI` looks at the host of the
+module path, then of `idl_repo`, and ngs passes `CI` = `github` / `gitlab` /
+`both` (unknown host or nothing configured) to the template, plus `IdlRepo` as
+the project *path* from `workspace.ParseRepo` (handles `owner/repo`, https,
+scp-style and ssh:// URLs, nested GitLab groups). The template wraps each CI
+file in an `{{if}}`; `render` drops templates that render empty, so only the
+wanted files are written, and `devkit update --force --set CI=gitlab` later
+removes the other one through the normal "no longer produced" rule. The
+GitLab pipeline has been validated as YAML and structurally, but has not run
+on a real GitLab yet. One machine, several
 projects, one global config: that is the reason this layer exists.
 
 **deps + ui.** `internal/deps.Ensure` is what makes "curl install, then ngs"

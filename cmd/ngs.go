@@ -124,8 +124,15 @@ func runNgs(ctx context.Context, name string) error {
 	}
 	vars["Service"] = name
 	vars["Module"] = module
-	if _, ok := vars["IdlRepo"]; !ok && idlRepo != "" && !workspace.IsLocal(idlRepo) {
-		vars["IdlRepo"] = idlRepo
+	// The CI templates need the IDL project's path (owner/repo or group/project),
+	// not its clone URL, and which platform to generate a pipeline for.
+	if _, ok := vars["IdlRepo"]; !ok {
+		if _, path := workspace.ParseRepo(idlRepo, cfg.GitHubHost); path != "" {
+			vars["IdlRepo"] = path
+		}
+	}
+	if _, ok := vars["CI"]; !ok {
+		vars["CI"] = workspace.DetectCI(module, idlRepo, cfg.GitHubHost)
 	}
 	if _, ok := vars["GoPrivate"]; !ok && ws.GoPrivate {
 		vars["GoPrivate"] = workspace.OrgPattern(module)

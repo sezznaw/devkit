@@ -93,13 +93,36 @@ then put `<url>` into `idl_repo` so teammates get the same IDLs. The shared
     conf/prod.yaml          production config, secrets from ${ENV_VARS}
     kitex_gen/              generated code, git-ignored
     Makefile                tools / gen / build / run / test / docker
-    .github/workflows/ci.yml  checks out the IDL repo, regenerates, builds, tests
+    .gitlab-ci.yml            and/or .github/workflows/ci.yml: clone the IDL repo,
+                              regenerate, build, test (see "CI" below)
     Dockerfile
 ```
 
 Daily loop: edit `../idl/order/order.thrift`, run `make gen`, implement the new
 methods in `handler/`, `make run`. Open a pull request in the IDL repository
 for IDL changes. Generated code is never committed; CI regenerates it.
+
+## CI
+
+The service gets the pipeline that matches where it is hosted, judged from
+`module_prefix` (or, failing that, `idl_repo`):
+
+| Host | Generated |
+|------|-----------|
+| `github.com/...` | `.github/workflows/ci.yml` |
+| a GitLab (`gitlab.yourcompany.com/...`) | `.gitlab-ci.yml` |
+| not known yet (nothing configured) | both; each platform ignores the other's file |
+
+Once you know, drop the surplus file from inside the service:
+`devkit update --force --set CI=gitlab` (or `github`, `both`, `none`). To
+choose up front for a whole project, put `vars: {CI: gitlab}` in `devkit.yaml`.
+
+Both pipelines fetch the shared IDL project, run `make tools && make gen`,
+then build and test, because generated code is not committed. They look for
+the IDL project at the path taken from `idl_repo`; with no `idl_repo` they
+assume a project named `idl` next to the service (`<group>/idl` on GitLab,
+`<owner>/idl` on GitHub). On GitLab the IDL project must allow the service's
+job token: IDL project → Settings → CI/CD → Job token permissions.
 
 ## Tools are installed for you
 

@@ -83,11 +83,26 @@ common_repo: ""                                         # 默认：sezznaw/devki
     conf/prod.yaml          生产配置，密钥来自 ${环境变量}
     kitex_gen/              生成的代码，已被 git 忽略
     Makefile                tools / gen / build / run / test / docker
-    .github/workflows/ci.yml  CI 检出 IDL 仓库、重新生成、编译、测试
+    .gitlab-ci.yml            以及/或者 .github/workflows/ci.yml：clone IDL 仓库、
+                              重新生成、编译、测试（见下面的"CI"一节）
     Dockerfile
 ```
 
 日常流程：改 `../idl/order/order.thrift`，执行 `make gen`，在 `handler/` 里实现新方法，`make run`。IDL 的改动向 IDL 仓库提 PR。生成的代码不提交，CI 会重新生成。
+
+## CI
+
+服务会得到与其托管平台匹配的流水线配置，依据是 `module_prefix`（没有的话看 `idl_repo`）：
+
+| 托管位置 | 生成的文件 |
+|----------|-----------|
+| `github.com/...` | `.github/workflows/ci.yml` |
+| GitLab（`gitlab.yourcompany.com/...`） | `.gitlab-ci.yml` |
+| 还不确定（什么都没配置） | 两份都生成；各平台会忽略对方的文件 |
+
+确定之后，在服务目录里去掉多余的那份：`devkit update --force --set CI=gitlab`（也可以是 `github`、`both`、`none`）。想为整个项目预先指定，在 `devkit.yaml` 里写 `vars: {CI: gitlab}`。
+
+因为生成的代码不提交，两种流水线都会先拉取共用的 IDL 项目，执行 `make tools && make gen`，再编译和测试。IDL 项目的路径取自 `idl_repo`；没有配置 `idl_repo` 时，默认认为服务旁边有一个名为 `idl` 的项目（GitLab 上是 `<分组>/idl`，GitHub 上是 `<所有者>/idl`）。在 GitLab 上，IDL 项目需要放行服务项目的 job token：IDL 项目 → Settings → CI/CD → Job token permissions。
 
 ## 工具会自动装好
 
