@@ -63,7 +63,7 @@ func Load(root string) (*Manifest, error) {
 	data, err := os.ReadFile(p)
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
-			return nil, fmt.Errorf("no %s found in %s (run `devkit init`)", filepath.Join(DirName, FileName), root)
+			return nil, fmt.Errorf("%s is not a service created by devkit (no %s); create one with `devkit ngs <service>`", root, filepath.Join(DirName, FileName))
 		}
 		return nil, err
 	}

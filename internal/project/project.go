@@ -28,7 +28,7 @@ func FindRoot(dir string) (string, error) {
 		}
 		parent := filepath.Dir(dir)
 		if parent == dir {
-			return "", errors.New("not inside a devkit project (run `devkit init` in the project root)")
+			return "", errors.New("not inside a service created by devkit (cd into one, or create it with `devkit ngs <service>`)")
 		}
 		dir = parent
 	}

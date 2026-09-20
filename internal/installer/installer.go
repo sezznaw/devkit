@@ -1,5 +1,5 @@
 // Package installer wires registry, render and manifest together: it is the
-// engine behind `devkit add`, `devkit update` and `devkit remove`.
+// engine behind `devkit ngs` (install) and `devkit update`.
 package installer
 
 import (
@@ -113,7 +113,7 @@ func (in *Installer) Update(ctx context.Context, opts Options) (bool, error) {
 	name := opts.Name
 	old, ok := in.Manifest.Components[name]
 	if !ok {
-		return false, fmt.Errorf("%s is not installed (use `devkit add %s`)", name, name)
+		return false, fmt.Errorf("component %s is not part of this service", name)
 	}
 	idx, err := in.Source.Index(ctx)
 	if err != nil {
