@@ -49,7 +49,7 @@ devkit ngs order
 ```
 
 ```sh
-cd order && make run      # starts with conf/dev.yaml, no Nacos needed locally
+cd order && make run      # conf/local.yaml: your machine and the Nacos on it (the file has the docker command)
 ```
 
 Every further service in the same project is just `devkit ngs <name>`.
@@ -89,8 +89,10 @@ then put `<url>` into `idl_repo` so teammates get the same IDLs. The shared
     cmd/order/main.go       framework entry point; replaced by devkit update, never edit it
     app/app.go              yours: the service's Config, its dependencies and shutdown cleanup
     handler/handler.go      yours: the RPC implementations
-    conf/dev.yaml           local config, Nacos registration disabled; every setting explained
-    conf/prod.yaml          production config, secrets from ${ENV_VARS}
+    conf/local.yaml         your own machine (no APP_ENV): registers in the Nacos on it; every setting explained
+    conf/dev.yaml           the shared development server; addresses and secrets from ${ENV_VARS}
+    conf/uat.yaml           user acceptance test
+    conf/prod.yaml          production
     conf/README.md          reference of all settings, kept up to date by devkit
     kitex_gen/              generated code, git-ignored
     idl.mk                  which IDLs this service generates code for (yours to edit)

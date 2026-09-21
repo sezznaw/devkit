@@ -43,7 +43,7 @@ devkit ngs order
 ```
 
 ```sh
-cd order && make run      # 使用 conf/dev.yaml 启动，本地不需要 Nacos
+cd order && make run      # 使用 conf/local.yaml：你的电脑和本机上的 Nacos（文件里有启动 Nacos 的 docker 命令）
 ```
 
 同一个项目里之后再建服务，只需要 `devkit ngs <名字>`。
@@ -79,7 +79,9 @@ idl_repo: "git@gitlab.yourcompany.com:shop/idl.git"     # 或 GitHub 上的 owne
     cmd/order/main.go       框架入口；由 devkit update 替换，不要修改
     app/app.go              归你：本服务的 Config、依赖的创建和退出清理
     handler/handler.go      归你：RPC 的实现
-    conf/dev.yaml           本地配置，关闭 Nacos 注册；每个配置项都有说明
+    conf/local.yaml         你自己的电脑（不设置 APP_ENV）：注册到本机的 Nacos；每个配置项都有说明
+    conf/dev.yaml           公共开发服务器；地址和密码来自 ${环境变量}
+    conf/uat.yaml           验收测试环境
     conf/prod.yaml          生产配置，密钥来自 ${环境变量}
     conf/README.md          全部配置项的参考文档，由 devkit 保持最新
     kitex_gen/              生成的代码，已被 git 忽略

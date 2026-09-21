@@ -292,7 +292,7 @@ func runNgs(ctx context.Context, name string) error {
 	}
 	st := ui.Stdout
 	fmt.Println(st.Heading("next steps:"))
-	fmt.Printf("  %s     %s\n", st.Bold("cd "+svcDir+" && make run"), st.Dim("# starts with conf/dev.yaml (Nacos disabled)"))
+	fmt.Printf("  %s     %s\n", st.Bold("cd "+svcDir+" && make run"), st.Dim("# conf/local.yaml: your machine, with the Nacos on it (the file says how to start one)"))
 	switch {
 	case ngsFlags.skipIdl:
 	case idlRepo == "":
