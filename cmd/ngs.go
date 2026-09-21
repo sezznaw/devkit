@@ -24,6 +24,19 @@ import (
 // The registry component that produces a whole service project.
 const serviceComponent = "kitex-service"
 
+// serviceKind is what differs between the commands that create a service.
+type serviceKind struct {
+	command   string // "ngs"
+	component string // the template it generates from
+	tools     string // for the first step
+	needsHz   bool
+}
+
+var (
+	rpcService = serviceKind{command: "ngs", component: serviceComponent, tools: "git, go, kitex, thriftgo"}
+	apiService = serviceKind{command: "nas", component: apiComponent, tools: "git, go, hz, kitex, thriftgo", needsHz: true}
+)
+
 var ngsFlags struct {
 	workspace  string
 	module     string
@@ -61,11 +74,13 @@ git repository).`,
   devkit ngs order --set Port=9000 --skip-common`,
 	Args: cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		return runNgs(cmd.Context(), args[0])
+		return runNew(cmd.Context(), rpcService, args[0])
 	},
 }
 
-func runNgs(ctx context.Context, name string) error {
+// runNew creates a service of the given kind. ngs and nas are the same steps
+// with another template underneath.
+func runNew(ctx context.Context, kind serviceKind, name string) error {
 	if err := registry.ValidateName(name); err != nil {
 		return err
 	}
@@ -136,17 +151,20 @@ func runNgs(ctx context.Context, name string) error {
 	if _, ok := vars["GoPrivate"]; !ok && ws.GoPrivate {
 		vars["GoPrivate"] = workspace.OrgPattern(module)
 	}
-	component := firstNonEmpty(ngsFlags.component, ws.Component, serviceComponent)
+	component := firstNonEmpty(ngsFlags.component, kind.component)
+	if kind.command == rpcService.command {
+		component = firstNonEmpty(ngsFlags.component, ws.Component, kind.component) // devkit.yaml "component" is the RPC template's
+	}
 
 	es := ui.Stderr
-	fmt.Fprintf(os.Stderr, "%s\n  %s %s\n  %s %s\n\n", es.Heading("devkit ngs "+name), es.Dim("project"), wsDir, es.Dim("module "), es.Cyan(module))
+	fmt.Fprintf(os.Stderr, "%s\n  %s %s\n  %s %s\n\n", es.Heading("devkit "+kind.command+" "+name), es.Dim("project"), wsDir, es.Dim("module "), es.Cyan(module))
 	r := ui.New(7)
 	fail := func(err error) error { r.Failed(err); return err }
 
-	// 1: tools. The component pins the kitex/thriftgo versions its Makefile uses.
+	// 1: tools. The component pins the generator versions its Makefile uses.
 	var statuses []deps.Status
 	var team teamValues
-	if err := r.Step("Checking tools (git, go, kitex, thriftgo)", func(s *ui.Step) error {
+	if err := r.Step("Checking tools ("+kind.tools+")", func(s *ui.Step) error {
 		idx, err := src.Index(ctx)
 		if err != nil {
 			return err
@@ -173,6 +191,11 @@ func runNgs(ctx context.Context, name string) error {
 		}
 		team = teamValuesOf(comp)
 		want := deps.Want{KitexVersion: resolved["KitexVersion"], ThriftgoVersion: resolved["ThriftgoVersion"]}
+		if kind.needsHz {
+			if want.HzVersion = resolved["HzVersion"]; want.HzVersion == "" {
+				return fmt.Errorf("component %s does not say which hz to use (HzVersion)", component)
+			}
+		}
 		statuses, err = deps.Ensure(ctx, want, s)
 		return err
 	}); err != nil {
@@ -265,7 +288,7 @@ func runNgs(ctx context.Context, name string) error {
 			syncProject(ctx, cfg, wsDir, teamValues{GoVersion: team.GoVersion}, true, s.Logf)
 			return nil
 		}
-		if err := workspace.InitRepo(ctx, svcDir, "chore: scaffold "+name+" with devkit ngs"); err != nil {
+		if err := workspace.InitRepo(ctx, svcDir, "chore: scaffold "+name+" with devkit "+kind.command); err != nil {
 			s.Log("warning: %v", err)
 		}
 		// The new service joins go.work so the IDE resolves the common library
@@ -348,14 +371,21 @@ func writeIdl(ctx context.Context, src registry.Source, component, version, idlD
 }
 
 func init() {
+	addNewServiceFlags(ngsCmd, rpcService)
+	rootCmd.AddCommand(ngsCmd)
+}
+
+// addNewServiceFlags gives ngs and nas the same flags; only one of the two
+// commands runs in a process, so they share the variables.
+func addNewServiceFlags(cmd *cobra.Command, kind serviceKind) {
+	ngsCmd := cmd
 	ngsCmd.Flags().StringVar(&ngsFlags.workspace, "workspace", "", "project directory (default: nearest devkit.yaml above, else the current directory)")
 	ngsCmd.Flags().StringVar(&ngsFlags.module, "module", "", "Go module path (default: <module_prefix>/<service>)")
-	ngsCmd.Flags().StringVar(&ngsFlags.component, "component", "", "registry component to scaffold from (default: "+serviceComponent+")")
+	ngsCmd.Flags().StringVar(&ngsFlags.component, "component", "", "registry component to scaffold from (default: "+kind.component+")")
 	ngsCmd.Flags().StringVar(&ngsFlags.version, "version", "", "component version (default: latest)")
 	ngsCmd.Flags().StringArrayVar(&ngsFlags.set, "set", nil, "extra template variable, key=value (repeatable)")
 	ngsCmd.Flags().BoolVar(&ngsFlags.skipIdl, "skip-idl", false, "do not clone the IDL repository or write the initial IDL")
 	ngsCmd.Flags().BoolVar(&ngsFlags.skipCommon, "skip-common", false, "do not clone the common library")
 	ngsCmd.Flags().BoolVar(&ngsFlags.noGit, "no-git", false, "do not git init / commit the new service")
 	ngsCmd.Flags().BoolVar(&ngsFlags.skipHooks, "skip-hooks", false, "do not run code generation / go mod tidy")
-	rootCmd.AddCommand(ngsCmd)
 }

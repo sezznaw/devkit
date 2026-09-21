@@ -14,7 +14,8 @@ module `github.com/sezznaw/devkit-common` (GitHub repo `sezznaw/devkit-common`,
 sibling checkout at `../common`; the local directory name differs from the
 repo name).
 
-The visible command surface is deliberately tiny: `ngs`, `update`,
+The visible command surface is deliberately tiny: `ngs`, `nas` (asked for by the
+owner on 2026-09-21: new API service, the Hertz twin of ngs), `update`,
 `self-update`, `doctor`, `version` (`config` and `completion` are hidden).
 The earlier package-manager commands (`init/add/list/remove`, `workspace`)
 were removed on 2026-09-19 at the user's request; do not reintroduce commands
@@ -143,6 +144,10 @@ platform asset and `checksums.txt` in the release JSON → download via the
 asset API URL → verify sha256 → extract → atomic `os.Rename` over the
 executable. `Updater.Target`
 exists so tests can point it at a temp file instead of the test binary.
+
+**nas** (`cmd/nas.go`) is ngs with another template: both call `runNew` with a `serviceKind`
+(command name, component `kitex-service` / `hertz-service`, whether `hz` is needed). Everything
+below about ngs holds for nas; do not let the two drift apart by copying code.
 
 **ngs** (`cmd/ngs.go`) is an orchestrator over the same pieces: it prepares
 the workspace (`internal/workspace`: git clone/pull of the `idl` and `common`

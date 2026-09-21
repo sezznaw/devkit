@@ -54,6 +54,21 @@ cd order && make run      # conf/local.yaml: your machine and the Nacos on it (t
 
 Every further service in the same project is just `devkit ngs <name>`.
 
+**The HTTP front of those services is `devkit nas <name>`** (new API service):
+
+```sh
+devkit nas gateway
+cd gateway && make run
+curl 'http://127.0.0.1:8080/ping?message=hi'
+```
+
+It is the same kind of project on CloudWeGo Hertz. The HTTP API is defined in
+the project's Thrift IDL with Hertz annotations (`api.get="/user/:id"`);
+`make gen` generates the routes with `hz` and, for the RPC services listed in
+`idl.mk`, their clients with `kitex`. Configuration, Nacos, logging (one
+`trace_id` from the HTTP request to the last RPC service) and the graceful stop
+are those of an RPC service; `hz` is installed for you like the other tools.
+
 **3. Optional: project settings**
 
 The first run writes a commented `devkit.yaml` next to your services. Edit it
@@ -180,10 +195,11 @@ echo 'source "$HOME/.devkit/env"' >> ~/.zshrc    # or ~/.bashrc
 
 | Command | When you need it |
 |---------|------------------|
-| `devkit ngs <service>` | create a service in the current project directory |
+| `devkit ngs <service>` | create an RPC service (Kitex) in the current project directory |
+| `devkit nas <service>` | create an API service (HTTP, Hertz) in the current project directory |
 | `devkit update` | upgrade the devkit-managed files (Makefile, CI, Dockerfile, `main.go`) to the latest template. Inside a service it updates that service; in the project directory it updates every service. `--check` only shows versions and local changes |
 | `devkit self-update` | upgrade devkit itself. `--check` only reports |
-| `devkit doctor` | show the state of git, Go, kitex, thriftgo against the team's versions. `--fix` installs what is missing and replaces a generator of another version |
+| `devkit doctor` | show the state of git, Go, kitex, thriftgo and hz against the team's versions. `--fix` installs what is missing and replaces a generator of another version |
 | `devkit version` | version info for bug reports |
 
 **Colours.** On a terminal devkit marks where to look: green for success,

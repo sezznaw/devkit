@@ -48,6 +48,19 @@ cd order && make run      # 使用 conf/local.yaml：你的电脑和本机上的
 
 同一个项目里之后再建服务，只需要 `devkit ngs <名字>`。
 
+**这些服务前面的 HTTP 入口用 `devkit nas <名字>`**（new API service）：
+
+```sh
+devkit nas gateway
+cd gateway && make run
+curl 'http://127.0.0.1:8080/ping?message=hi'
+```
+
+它是同一种工程，基于 CloudWeGo Hertz。HTTP 接口写在项目的 Thrift IDL 里，用 Hertz 的注解
+指明路由（`api.get="/user/:id"`）；`make gen` 用 `hz` 生成路由，并为 `idl.mk` 里列出的 RPC
+服务用 `kitex` 生成客户端。配置、Nacos、日志（从 HTTP 请求到最后一个 RPC 服务是同一个
+`trace_id`）和优雅退出都与 RPC 服务相同；`hz` 和其他工具一样会自动安装。
+
 **3. 可选：项目设置**
 
 第一次执行会在服务旁边生成一份带注释的 `devkit.yaml`。等你确定代码放在哪里之后再编辑它；另一个项目就是另一个目录，里面放它自己的 `devkit.yaml`。
@@ -136,10 +149,11 @@ echo 'source "$HOME/.devkit/env"' >> ~/.zshrc    # 或 ~/.bashrc
 
 | 命令 | 什么时候用 |
 |------|-----------|
-| `devkit ngs <服务名>` | 在当前项目目录下创建服务 |
+| `devkit ngs <服务名>` | 在当前项目目录下创建 RPC 服务（Kitex） |
+| `devkit nas <服务名>` | 在当前项目目录下创建 API 服务（HTTP，Hertz） |
 | `devkit update` | 把 devkit 管理的文件（Makefile、CI、Dockerfile、`main.go`）升级到最新模板。在服务目录内执行只更新该服务；在项目目录下执行则更新全部服务。`--check` 只显示版本和本地改动 |
 | `devkit self-update` | 升级 devkit 自身。`--check` 只报告 |
-| `devkit doctor` | 对照团队版本查看 git、Go、kitex、thriftgo 的状态。`--fix` 安装缺失的工具，并替换版本不对的生成器 |
+| `devkit doctor` | 对照团队版本查看 git、Go、kitex、thriftgo、hz 的状态。`--fix` 安装缺失的工具，并替换版本不对的生成器 |
 | `devkit version` | 报问题时提供版本信息 |
 
 **颜色。** 在终端里 devkit 用颜色标出重点：绿色表示成功，红色表示失败，黄色表示需要你留意的内容（被跳过的文件、有新版本、需要手动处理的事项），加粗是标题，灰色是次要信息（例如 `go mod tidy` 的输出）。输出被重定向、在 CI 里或设置了 `DEVKIT_PLAIN=1` 时是纯文本；`NO_COLOR=1` 只去掉颜色；`CLICOLOR_FORCE=1` 在管道里也保留颜色，比如配合 `less -R`。

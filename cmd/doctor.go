@@ -18,14 +18,15 @@ var doctorFlags struct {
 
 var doctorCmd = &cobra.Command{
 	Use:   "doctor",
-	Short: "Check (and with --fix install) the tools needed to build services: git, Go, kitex, thriftgo",
-	Long: `doctor reports the state of git, Go, kitex and thriftgo. The kitex and
-thriftgo versions are the team's, taken from the service template, and a tool
-of another version counts as a problem. With --fix it installs or replaces
+	Short: "Check (and with --fix install) the tools needed to build services: git, Go, kitex, thriftgo, hz",
+	Long: `doctor reports the state of git, Go and the code generators: kitex and
+thriftgo for RPC services, hz for API services. Their versions are the team's,
+taken from the service templates, and a tool of another version counts as a
+problem. With --fix it installs or replaces
 what is needed: Go from go.dev into ~/.devkit/go (only when no Go is present),
-kitex and thriftgo with go install. Installed tools are put on PATH through
+the generators with go install. Installed tools are put on PATH through
 ~/.devkit/env; source it from your shell profile once. 'devkit ngs' runs the
-same check automatically.`,
+same check automatically, and so does 'devkit nas'.`,
 	Args: cobra.NoArgs,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		want, source := teamVersions(cmd)
@@ -46,7 +47,11 @@ same check automatically.`,
 				}
 				fmt.Printf("%-10s %s\n", s.Name, state)
 			}
-			fmt.Println(ui.Stdout.Dim("team versions from " + source + ": kitex " + want.KitexVersion + ", thriftgo " + want.ThriftgoVersion))
+			versions := "kitex " + want.KitexVersion + ", thriftgo " + want.ThriftgoVersion
+			if want.HzVersion != "" {
+				versions += ", hz " + want.HzVersion
+			}
+			fmt.Println(ui.Stdout.Dim("team versions from " + source + ": " + versions))
 			if problems > 0 {
 				fmt.Printf("\n%s; run `devkit doctor --fix`\n", ui.Stdout.Attention(fmt.Sprintf("%d problem(s)", problems)))
 			}
@@ -96,7 +101,16 @@ func teamVersions(cmd *cobra.Command) (deps.Want, string) {
 	if v := comp.VarByName("ThriftgoVersion"); v != nil && v.Default != "" {
 		want.ThriftgoVersion = v.Default
 	}
-	return want, "template " + comp.Name + "@" + comp.Version
+	source := "template " + comp.Name + "@" + comp.Version
+	// hz comes from the API template. A registry without it (an older one, or
+	// a team that has no API services) simply has no hz to check.
+	if api, err := in.Latest(cmd.Context(), apiComponent); err == nil {
+		if v := api.VarByName("HzVersion"); v != nil && v.Default != "" {
+			want.HzVersion = v.Default
+			source = "templates " + comp.Name + "@" + comp.Version + " and " + api.Name + "@" + api.Version
+		}
+	}
+	return want, source
 }
 
 func init() {
