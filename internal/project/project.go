@@ -36,7 +36,7 @@ func FindRoot(dir string) (string, error) {
 
 // Services lists the immediate subdirectories of dir that were created by
 // devkit (they contain a manifest), sorted by name. Checkouts such as idl/ and
-// common/ have no manifest and are therefore never mistaken for services.
+// kit-common/ have no manifest and are therefore never mistaken for services.
 func Services(dir string) ([]string, error) {
 	entries, err := os.ReadDir(dir)
 	if err != nil {

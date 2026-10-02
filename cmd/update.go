@@ -99,7 +99,7 @@ Files you own (go.mod, idl.mk, conf/, handler/) are never touched.`,
 				failed = append(failed, name)
 			}
 		}
-		// Whatever the scope, the project's common/ and go.work follow the team.
+		// Whatever the scope, the project's kit-common/ and go.work follow the team.
 		syncAfterUpdate(cmd, roots, single)
 		if single {
 			printNotes(notes)
@@ -221,7 +221,7 @@ func syncAfterUpdate(cmd *cobra.Command, roots []string, single bool) {
 	if project == "" || !ok || err != nil {
 		return
 	}
-	if _, statErr := os.Stat(filepath.Join(project, "common")); statErr != nil {
+	if _, statErr := os.Stat(filepath.Join(project, workspace.CommonDir)); statErr != nil && !workspace.IsLegacyCommon(cmd.Context(), project, commonURL(cfg, project)) {
 		team.CommonVersion = "" // this project opted out of the checkout (--skip-common)
 	}
 	syncProject(cmd.Context(), cfg, project, team, false, logf)
@@ -393,18 +393,22 @@ func printStatus(cmd *cobra.Command, roots []string, single bool) error {
 
 	// The common library checkout the IDE navigates into.
 	project := projectOf(roots, single)
-	if _, err := os.Stat(filepath.Join(project, "common", ".git")); err == nil {
+	dirName := workspace.CommonDir + "/"
+	if _, err := os.Stat(filepath.Join(project, workspace.CommonDir, ".git")); err == nil {
 		if team, ok := teamFor(cmd, roots[0]); ok {
-			c := workspace.CommonStatus(cmd.Context(), filepath.Join(project, "common"), team.CommonVersion)
+			c := workspace.CommonStatus(cmd.Context(), filepath.Join(project, workspace.CommonDir), team.CommonVersion)
 			switch {
 			case c.Dirty:
-				fmt.Printf("\n%s %s, %s\n", st.Bold("common/"), c.Version, st.Attention("has local changes: builds here use them, CI does not (team: "+c.Want+")"))
+				fmt.Printf("\n%s %s, %s\n", st.Bold(dirName), c.Version, st.Attention("has local changes: builds here use them, CI does not (team: "+c.Want+")"))
 			case c.Version != c.Want:
-				fmt.Printf("\n%s %s\n", st.Bold("common/"), st.Attention(c.Version+" (team: "+c.Want+"); run `devkit update`"))
+				fmt.Printf("\n%s %s\n", st.Bold(dirName), st.Attention(c.Version+" (team: "+c.Want+"); run `devkit update`"))
 			default:
-				fmt.Printf("\n%s %s\n", st.Bold("common/"), st.Green(c.Version+" (team version)"))
+				fmt.Printf("\n%s %s\n", st.Bold(dirName), st.Green(c.Version+" (team version)"))
 			}
 		}
+	} else if cfg, err := config.Load(); err == nil && workspace.IsLegacyCommon(cmd.Context(), project, commonURL(cfg, project)) {
+		// --check changes nothing; it says what `devkit update` will do.
+		fmt.Printf("\n%s %s\n", st.Bold("common/"), st.Attention("is the shared library under its old name; `devkit update` renames it to "+dirName+" and leaves common/ to the project"))
 	}
 	return nil
 }

@@ -56,7 +56,7 @@ var ngsCmd = &cobra.Command{
 	Long: `ngs sets up everything a new service needs:
 
   1. clones (or updates) the project's IDL repository into ./idl
-  2. clones the common library into ./common (for reading and local changes)
+  2. clones the common library into ./kit-common (for reading and local changes)
   3. generates ./<service> from the kitex-service component
   4. writes the initial Thrift IDL into ./idl/<service>/
   5. runs the code generator and go mod tidy
@@ -292,7 +292,7 @@ func runNew(ctx context.Context, kind serviceKind, name string) error {
 			s.Log("warning: %v", err)
 		}
 		// The new service joins go.work so the IDE resolves the common library
-		// to common/ for it as well.
+		// to kit-common/ for it as well.
 		syncProject(ctx, cfg, wsDir, teamValues{GoVersion: team.GoVersion}, true, s.Logf)
 		return nil
 	}); err != nil {

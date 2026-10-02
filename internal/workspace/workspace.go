@@ -1,5 +1,5 @@
 // Package workspace manages the developer workspace used by `devkit ngs`:
-// a directory holding the shared idl/ and common/ checkouts next to the
+// a directory holding the shared idl/ and kit-common/ checkouts next to the
 // services being developed.
 package workspace
 

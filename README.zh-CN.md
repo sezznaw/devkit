@@ -85,9 +85,9 @@ idl_repo: "git@gitlab.yourcompany.com:shop/idl.git"     # 或 GitHub 上的 owne
 ```
 ~/work/shop/
   devkit.yaml               可选的项目设置
-  go.work                   让 Go 工具和 IDE 使用 ./common（只存在于本机）
+  go.work                   让 Go 工具和 IDE 使用 ./kit-common（只存在于本机）
   idl/                      IDL 仓库的 clone；已替你加好 order/order.thrift
-  common/                   团队当前版本的共享库；"跳转到定义"会落在这里
+  kit-common/                团队当前版本的共享库；"跳转到定义"会落在这里
   order/
     cmd/order/main.go       框架入口；由 devkit update 替换，不要修改
     app/app.go              归你：本服务的 Config、依赖的创建和退出清理
@@ -107,7 +107,9 @@ idl_repo: "git@gitlab.yourcompany.com:shop/idl.git"     # 或 GitHub 上的 owne
 
 **common 库是你项目的一部分。** `ngs` 和 `devkit update` 会让 `common/` 始终检出团队当前发布的版本，并在旁边维护一个 `go.work`，其中列出 `common/` 和每个服务。Go 工具和 IDE 因此会把 `github.com/sezznaw/devkit-common` 解析到这个目录，"跳转到定义"打开的是你项目里的代码，而不是只读的模块缓存。由于 `common/` 里正好是你的服务锁定的那个发布版本，你本地编出来的和 CI 编出来的完全一致；`go.work` 只存在于你的机器上，CI 和 Docker 构建都看不到它。如果你的 IDE 只打开了单个服务而没有识别到它，请改为打开项目目录。
 
-不要修改 `common/`：那里的改动只影响你本机的编译结果。devkit 不会丢弃这类改动，但 `update` 和 `update --check` 会明确提示。对库的修改应当提交到它自己的仓库，通过发布新版本到达所有人。`GOWORK=off go build ./...` 可以按 CI 的方式编译。
+目录叫 `kit-common/`，是因为项目通常有自己的 `common`，那个名字留给你。用旧版 devkit 创建的项目，共享库检出在 `common/` 里：下一次 `devkit update`（或 `ngs` / `nas`）会把它连同里面的全部内容改名为 `kit-common/`，并重写 `go.work`。不是共享库检出的 `common/` 永远不会被碰。
+
+不要修改 `kit-common/`：那里的改动只影响你本机的编译结果。devkit 不会丢弃这类改动，但 `update` 和 `update --check` 会明确提示。对库的修改应当提交到它自己的仓库，通过发布新版本到达所有人。`GOWORK=off go build ./...` 可以按 CI 的方式编译。
 
 **框架文件和你的文件。** 框架由专人统一维护，所以任何只属于某个服务的东西都不放在框架文件里。`main.go`、Makefile、CI 文件、Dockerfile 和 `conf/README.md` 会被 `devkit update` 替换；一旦改动其中某个文件，它以后就无法再被升级。其余文件都归你所有，永远不会被改写。要给服务加自己的配置节，或者加一个 Redis 这样的依赖，改 `app/app.go`：在 `Config` 里加字段，在 `Setup` 里创建客户端并注册 `kitexx.OnShutdown`，再传给 `handler.New(...)`。
 
@@ -177,7 +179,7 @@ modified locally, not overwritten; merge the .new copy by hand or rerun with --f
   game/Makefile
 ```
 
-"服务"指由 devkit 创建的那些子目录，`idl/` 和 `common/` 不会被碰。某个服务更新失败不会中断其他服务。在项目目录下使用 `--force` 时，devkit 会先列出即将被覆盖的、你改过的文件并要求确认（`--yes` 跳过询问）。
+"服务"指由 devkit 创建的那些子目录，`idl/` 和 `kit-common/` 不会被碰。某个服务更新失败不会中断其他服务。在项目目录下使用 `--force` 时，devkit 会先列出即将被覆盖的、你改过的文件并要求确认（`--yes` 跳过询问）。
 
 ### 如何知道一次更新带来了什么
 
@@ -222,7 +224,7 @@ your own files are never rewritten; you may want to:
 ## 常见问题
 
 **`"handler" cannot be used as a service name`**
-有些名字无法生成可编译的 Go 服务：Go 的关键字和内置标识符（`map`、`type`、`string`、`error`、`new` 等）、`main`、`init`、`internal`、`vendor`、`handler`（与 Kitex 生成的代码内部冲突），以及项目目录已占用的 `idl` 和 `common`。换一个名字即可，例如 `handler-svc`。
+有些名字无法生成可编译的 Go 服务：Go 的关键字和内置标识符（`map`、`type`、`string`、`error`、`new` 等）、`main`、`init`、`internal`、`vendor`、`handler`（与 Kitex 生成的代码内部冲突），以及项目目录已占用的 `idl`、`kit-common`，还有留给项目自己共享代码的 `common`。换一个名字即可，例如 `handler-svc`。
 
 **`you are inside the service ...`**
 你在某个服务目录内部执行了 `ngs`。回到项目目录（含 `devkit.yaml` 的那一层）。

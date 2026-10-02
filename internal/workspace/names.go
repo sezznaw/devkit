@@ -27,7 +27,8 @@ var reserved = map[string]string{
 	"vendor":   "Go treats a directory named vendor specially",
 	"handler":  "it collides with identifiers inside Kitex's generated code",
 	"idl":      "idl/ is the project's shared IDL directory",
-	"common":   "common/ is the checkout of the shared library",
+	"common":   "common/ is for the project's own shared code",
+	CommonDir:  CommonDir + "/ is the checkout of the shared library",
 }
 
 // ValidateServiceName rejects names that would produce a service that cannot
@@ -41,6 +42,8 @@ func ValidateServiceName(name string) error {
 		return fmt.Errorf("%q cannot be used as a service name: it is a built-in Go identifier; try %q", name, name+"-svc")
 	case reserved[pkg] != "":
 		return fmt.Errorf("%q cannot be used as a service name: %s; try %q", name, reserved[pkg], name+"-svc")
+	case reserved[name] != "": // a directory name of the project layout, as written
+		return fmt.Errorf("%q cannot be used as a service name: %s; try %q", name, reserved[name], name+"-svc")
 	}
 	return nil
 }

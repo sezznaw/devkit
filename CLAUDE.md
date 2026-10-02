@@ -85,7 +85,7 @@ builds one `installer.Installer` per service through
 `update` derives its scope from where it runs (`cmd/update.go:updateScope`):
 inside a service (`project.FindRoot`) it handles that one; otherwise it takes
 the project directory (`workspace.Find`, else cwd) and every subdirectory
-with a manifest (`project.Services`), so `idl/` and `common/` are never
+with a manifest (`project.Services`), so `idl/` and `kit-common/` are never
 candidates. In that mode a failing service is reported and skipped, a summary
 lists files left alone (`Installer.LastSkipped`), and `--force` goes through
 `confirmForce`: list the modified managed files, ask, refuse without a
@@ -172,7 +172,7 @@ repository made by `workspace.EnsureLocalRepo` (nothing cloned, no pull
 warnings while it has no remote). The common library is fixed
 (`workspace.DefaultCommonRepo`); a `common_repo` key is still parsed for
 forks of the framework but is intentionally absent from the template and the
-docs, because it only picks what is cloned into `common/` for reading while
+docs, because it only picks what is cloned into `kit-common/` for reading while
 the real dependency is `CommonModule` in the template's go.mod.
 After a successful run ngs writes a commented `devkit.yaml`
 (`workspace.WriteTemplate`) if none exists, for discoverability and so that
@@ -185,7 +185,7 @@ full git URL and `module_prefix` any host. `workspace.TokenAllowedFor` makes
 sure the GitHub token is only ever sent over https to the configured GitHub
 host. `workspace.ValidateServiceName` rejects names measured to break the
 build (Go keywords and builtins, `main`, `init`, `internal`, `vendor`,
-`handler`, and the project directories `idl`/`common`).
+`handler`, and the project directories `idl`/`kit-common`, plus `common`, which is left to the project).
 
 CI follows the hosting platform: `workspace.DetectCI` looks at the host of the
 module path, then of `idl_repo`, and ngs passes `CI` = `github` / `gitlab` /
@@ -246,14 +246,19 @@ action). `Installer.Update` stores `ChangesBetween(old, new)` in `LastNotes`;
 with the manual actions called out. `registry.CompareVersions` is numeric per
 dotted part, so 0.10.0 sorts after 0.9.0.
 
-**common/ and go.work.** The owner requires that "go to definition" on the
-common library lands in the project, and that `common/` is current after
+**kit-common/ and go.work.** The owner requires that "go to definition" on the
+common library lands in the project, and that `kit-common/` is current after
 `ngs` and `update`. `cmd/common.go:syncProject` does both:
-`workspace.SyncCommon` clones/fetches `<project>/common` and checks out the
+`workspace.SyncCommon` clones/fetches `<project>/kit-common` and checks out the
 team's `CommonVersion` *tag* (detached; never main, so the directory equals
 what the services pin and local builds equal CI), and `workspace.SyncGoWork`
-writes `<project>/go.work` with `./common` and every service. Rules: a dirty
-`common/` is never touched, only reported (ngs, update, `update --check`); a
+writes `<project>/go.work` with `./kit-common` and every service. The directory
+is `workspace.CommonDir`; it was `common/` until 0.2.0, and the owner renamed it
+because projects have a `common` of their own. `workspace.MigrateCommonDir`
+(called by `syncProject`) renames an old `common/` only when its origin is the
+shared library's repository and `kit-common/` does not exist; `update --check`
+only announces it. Rules: a dirty
+`kit-common/` is never touched, only reported (ngs, update, `update --check`); a
 `go.work` without devkit's marker is never overwritten; both failures are
 warnings, not errors; `go.work` is per machine because the project directory
 is not a repository, so CI and Docker never see it. `update` runs

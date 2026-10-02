@@ -10,7 +10,7 @@ import (
 
 func TestServicesFindsOnlyDevkitDirectories(t *testing.T) {
 	root := t.TempDir()
-	for _, d := range []string{"user", "game", "idl", "common", ".hidden"} {
+	for _, d := range []string{"user", "game", "idl", "common", "kit-common", ".hidden"} {
 		os.MkdirAll(filepath.Join(root, d), 0o755)
 	}
 	os.WriteFile(filepath.Join(root, "devkit.yaml"), nil, 0o644)
@@ -24,7 +24,7 @@ func TestServicesFindsOnlyDevkitDirectories(t *testing.T) {
 		t.Fatal(err)
 	}
 	if len(got) != 2 || filepath.Base(got[0]) != "game" || filepath.Base(got[1]) != "user" {
-		t.Fatalf("Services = %v, want [game user] (sorted, no idl/common/hidden)", got)
+		t.Fatalf("Services = %v, want [game user] (sorted, no idl/common/kit-common/hidden)", got)
 	}
 }
 

@@ -97,9 +97,9 @@ then put `<url>` into `idl_repo` so teammates get the same IDLs. The shared
 ```
 ~/work/shop/
   devkit.yaml               optional project settings
-  go.work                   makes the Go tools and your IDE use ./common (this machine only)
+  go.work                   makes the Go tools and your IDE use ./kit-common (this machine only)
   idl/                      clone of the IDL repository; order/order.thrift was added for you
-  common/                   the shared library at the team's version; "go to definition" lands here
+  kit-common/                the shared library at the team's version; "go to definition" lands here
   order/
     cmd/order/main.go       framework entry point; replaced by devkit update, never edit it
     app/app.go              yours: the service's Config, its dependencies and shutdown cleanup
@@ -118,17 +118,23 @@ then put `<url>` into `idl_repo` so teammates get the same IDLs. The shared
 ```
 
 **The common library is part of your project.** `ngs` and `devkit update`
-keep `common/` checked out at the team's released version and maintain a
-`go.work` next to it that lists `common/` and every service. The Go tools and
+keep `kit-common/` checked out at the team's released version and maintain a
+`go.work` next to it that lists `kit-common/` and every service. The Go tools and
 the IDE then resolve `github.com/sezznaw/devkit-common` to that directory, so
 "go to definition" opens code inside your project instead of the read-only
-module cache. Because `common/` holds exactly the release your services pin,
+module cache. Because `kit-common/` holds exactly the release your services pin,
 what you build locally is what CI builds; `go.work` exists only on your
 machine and neither CI nor a Docker build ever sees it. If your IDE has only a
 single service open and does not pick it up, open the project directory
 instead.
 
-Do not edit `common/`: a change there affects builds on your machine only.
+The directory is called `kit-common/` because a project has a `common` of its
+own; that name is yours. A project created with an earlier devkit has the
+checkout in `common/`: the next `devkit update` (or `ngs` / `nas`) renames it
+to `kit-common/`, with everything in it, and rewrites `go.work`. A `common/`
+that is anything else is never touched.
+
+Do not edit `kit-common/`: a change there affects builds on your machine only.
 devkit never discards such a change, but `update` and `update --check` call it
 out. Changes to the library go into its own repository and reach everyone
 through a release. `GOWORK=off go build ./...` builds the way CI does.
@@ -229,7 +235,7 @@ modified locally, not overwritten; merge the .new copy by hand or rerun with --f
   game/Makefile
 ```
 
-Services are the subdirectories created by devkit; `idl/` and `common/` are
+Services are the subdirectories created by devkit; `idl/` and `kit-common/` are
 never touched. A service that fails does not stop the others. With `--force`
 in the project directory devkit first lists the modified files it is about to
 overwrite and asks for confirmation (`--yes` skips the question).
@@ -292,7 +298,8 @@ and never touched again. For the managed files:
 Some names cannot become a compiling Go service: Go keywords and built-ins
 (`map`, `type`, `string`, `error`, `new`, ...), `main`, `init`, `internal`,
 `vendor`, `handler` (clashes inside Kitex's generated code), and `idl` /
-`common`, which are directories of the project. Pick another name, for example
+`kit-common`, which are directories of the project, and `common`, which is
+left to the project's own shared code. Pick another name, for example
 `handler-svc`.
 
 **`you are inside the service ...`**

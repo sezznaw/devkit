@@ -15,7 +15,7 @@ import (
 // global ~/.devkit/config.yaml keeps only GitHub host and token.
 const ConfigFile = "devkit.yaml"
 
-// DefaultCommonRepo is the shared library cloned to common/ for reading. It is
+// DefaultCommonRepo is the shared library cloned to kit-common/ for reading. It is
 // fixed for everyone using this framework. The `common_repo` key is still
 // parsed (forks of the whole framework need it) but is deliberately not
 // offered in the devkit.yaml template or the docs: it only chooses what is

@@ -3,7 +3,7 @@ package workspace
 import "testing"
 
 func TestValidateServiceName(t *testing.T) {
-	bad := []string{"func", "map", "type", "go", "string", "error", "new", "init", "main", "internal", "vendor", "handler", "idl", "common"}
+	bad := []string{"func", "map", "type", "go", "string", "error", "new", "init", "main", "internal", "vendor", "handler", "idl", "common", "kit-common"}
 	for _, n := range bad {
 		if err := ValidateServiceName(n); err == nil {
 			t.Errorf("%q must be rejected", n)

@@ -15,7 +15,7 @@ var nasCmd = &cobra.Command{
 It sets up everything the new service needs:
 
   1. clones (or updates) the project's IDL repository into ./idl
-  2. clones the common library into ./common (for reading and local changes)
+  2. clones the common library into ./kit-common (for reading and local changes)
   3. generates ./<service> from the hertz-service component
   4. writes the initial Thrift IDL, with the route annotations of Hertz, into
      ./idl/<service>/
