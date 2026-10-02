@@ -252,7 +252,10 @@ common library lands in the project, and that `kit-common/` is current after
 `workspace.SyncCommon` clones/fetches `<project>/kit-common` and checks out the
 team's `CommonVersion` *tag* (detached; never main, so the directory equals
 what the services pin and local builds equal CI), and `workspace.SyncGoWork`
-writes `<project>/go.work` with `./kit-common` and every service. The directory
+writes `<project>/go.work` with `./kit-common`, every service, and the project's
+own `./common` when that has a `go.mod` (the owner asked for it: their shared
+code must open in the project too, and go.work is ours to rewrite; it is
+skipped when it declares the same module as `kit-common/`). The directory
 is `workspace.CommonDir`; it was `common/` until 0.2.0, and the owner renamed it
 because projects have a `common` of their own. `workspace.MigrateCommonDir`
 (called by `syncProject`) renames an old `common/` only when its origin is the

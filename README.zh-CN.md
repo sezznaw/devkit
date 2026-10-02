@@ -85,7 +85,7 @@ idl_repo: "git@gitlab.yourcompany.com:shop/idl.git"     # 或 GitHub 上的 owne
 ```
 ~/work/shop/
   devkit.yaml               可选的项目设置
-  go.work                   让 Go 工具和 IDE 使用 ./kit-common（只存在于本机）
+  go.work                   让 Go 工具和 IDE 使用 ./kit-common 和你们自己的 ./common（只存在于本机）
   idl/                      IDL 仓库的 clone；已替你加好 order/order.thrift
   kit-common/                团队当前版本的共享库；"跳转到定义"会落在这里
   order/
@@ -108,6 +108,8 @@ idl_repo: "git@gitlab.yourcompany.com:shop/idl.git"     # 或 GitHub 上的 owne
 **common 库是你项目的一部分。** `ngs` 和 `devkit update` 会让 `common/` 始终检出团队当前发布的版本，并在旁边维护一个 `go.work`，其中列出 `common/` 和每个服务。Go 工具和 IDE 因此会把 `github.com/sezznaw/devkit-common` 解析到这个目录，"跳转到定义"打开的是你项目里的代码，而不是只读的模块缓存。由于 `common/` 里正好是你的服务锁定的那个发布版本，你本地编出来的和 CI 编出来的完全一致；`go.work` 只存在于你的机器上，CI 和 Docker 构建都看不到它。如果你的 IDE 只打开了单个服务而没有识别到它，请改为打开项目目录。
 
 目录叫 `kit-common/`，是因为项目通常有自己的 `common`，那个名字留给你。用旧版 devkit 创建的项目，共享库检出在 `common/` 里：下一次 `devkit update`（或 `ngs` / `nas`）会把它连同里面的全部内容改名为 `kit-common/`，并重写 `go.work`。不是共享库检出的 `common/` 永远不会被碰。
+
+你们自己的 `common/` 只要是一个 Go 模块（里面有 `go.mod`），也会被写进 `go.work`：引用它的服务直接按这个目录编译，“跳转到定义”也落在这里。`go.work` 由 `ngs`、`nas` 和 `update` 重写，所以新建 `common/` 之后执行一次 `devkit update`；手动加进去的行会在下次重写时丢失。和 `go.work` 里的其他内容一样，这只对你的电脑生效：CI 编译服务时用的是该服务 `go.mod` 里要求的 `common` 版本。
 
 不要修改 `kit-common/`：那里的改动只影响你本机的编译结果。devkit 不会丢弃这类改动，但 `update` 和 `update --check` 会明确提示。对库的修改应当提交到它自己的仓库，通过发布新版本到达所有人。`GOWORK=off go build ./...` 可以按 CI 的方式编译。
 

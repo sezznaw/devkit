@@ -97,7 +97,7 @@ then put `<url>` into `idl_repo` so teammates get the same IDLs. The shared
 ```
 ~/work/shop/
   devkit.yaml               optional project settings
-  go.work                   makes the Go tools and your IDE use ./kit-common (this machine only)
+  go.work                   makes the Go tools and your IDE use ./kit-common and your own ./common (this machine only)
   idl/                      clone of the IDL repository; order/order.thrift was added for you
   kit-common/                the shared library at the team's version; "go to definition" lands here
   order/
@@ -133,6 +133,14 @@ own; that name is yours. A project created with an earlier devkit has the
 checkout in `common/`: the next `devkit update` (or `ngs` / `nas`) renames it
 to `kit-common/`, with everything in it, and rewrites `go.work`. A `common/`
 that is anything else is never touched.
+
+Your own `common/`, when it is a Go module (it has a `go.mod`), is listed in
+`go.work` as well: services that import it build against the directory, and
+"go to definition" opens it there. `go.work` is rewritten by `ngs`, `nas` and
+`update`, so after creating `common/` run `devkit update` once; a line added
+by hand would not survive. As with everything in `go.work`, this is for your
+machine: CI builds a service with the version of your `common` that its
+`go.mod` requires.
 
 Do not edit `kit-common/`: a change there affects builds on your machine only.
 devkit never discards such a change, but `update` and `update --check` call it

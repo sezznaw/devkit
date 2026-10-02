@@ -165,3 +165,48 @@ func TestMigrateCommonDir(t *testing.T) {
 		t.Error("the project's repository was touched")
 	}
 }
+
+// The project's own common/ is a Go module of the project: it belongs in
+// go.work like the services, so that the IDE opens it and builds use it.
+func TestGoWorkListsTheProjectsOwnCommon(t *testing.T) {
+	project := t.TempDir()
+	mod := func(name, module string) string {
+		d := filepath.Join(project, name)
+		os.MkdirAll(d, 0o755)
+		os.WriteFile(filepath.Join(d, "go.mod"), []byte("// shared code\nmodule "+module+"\n\ngo 1.26.0\n"), 0o644)
+		return d
+	}
+	read := func() string {
+		b, _ := os.ReadFile(filepath.Join(project, "go.work"))
+		return string(b)
+	}
+	user := mod("user", "game/user")
+	mod(CommonDir, "github.com/sezznaw/devkit-common")
+
+	// A common/ without go.mod is a directory of files, not a module.
+	os.MkdirAll(filepath.Join(project, "common"), 0o755)
+	if _, err := SyncGoWork(project, "1.26.0", []string{user}); err != nil {
+		t.Fatal(err)
+	}
+	if got := read(); strings.Contains(got, "\t./common\n") {
+		t.Fatalf("not a module, must not be listed:\n%s", got)
+	}
+
+	mod("common", "gitlab.company.com/game/common")
+	if changed, err := SyncGoWork(project, "1.26.0", []string{user}); err != nil || !changed {
+		t.Fatalf("the project's common became a module: %v %v", changed, err)
+	}
+	if got := read(); !strings.Contains(got, "\t./common\n\t./kit-common\n\t./user\n") {
+		t.Fatalf("common, kit-common and the service, sorted:\n%s", got)
+	}
+
+	// A copy of the shared library left in common/ next to kit-common/: the
+	// same module twice would stop every go command.
+	mod("common", "github.com/sezznaw/devkit-common")
+	if _, err := SyncGoWork(project, "1.26.0", []string{user}); err != nil {
+		t.Fatal(err)
+	}
+	if got := read(); strings.Contains(got, "\t./common\n") || !strings.Contains(got, "\t./kit-common\n") {
+		t.Fatalf("one module must not be listed twice:\n%s", got)
+	}
+}
