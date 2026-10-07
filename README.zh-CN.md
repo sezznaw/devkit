@@ -136,10 +136,11 @@ IDL 的改动向 IDL 仓库提 PR。生成的代码不提交，CI 会重新生�
 
 ### Lint：团队规矩的机器检查
 
-`devkit lint`（`make lint` 在本机和 CI 里都会跑）按 `idl/AGENTS.md` 的规矩检查服务，不管代码是谁写的：不许自己连中间件
-（要用 `rt.DB`、`rt.Redis`、`rt.Kafka`、`rt.S3`、`rt.Provider`）、调第三方只能在厂商服务（devkit.yaml 的 `vendor_service`，
-默认 `ser-vendor`）、金额不许浮点、写方法要有 `request_id`、IDL 方法要有注释、错误码要在 `idl/errors.md` 登记、框架文件不许改、
-日志走 zlog。每条输出都写了该怎么改；有问题退出码 1，CI 停下。某一行确属误报可加 `//devkit:lint-ignore <规则>`。`idl-lock` 规则堵住分仓库的"先推 IDL"陷阱：`make gen` 写 `idl.lock`，
+`devkit lint`（`make lint` 在本机和 CI 里都会跑）按团队规矩检查服务，不管代码是谁写的。通用规则所有项目一样：不许自己连中间件
+（要用 `rt.DB`、`rt.Redis`、`rt.Kafka`、`rt.S3`、`rt.Provider`）、金额不许浮点（amount、balance、price、fee……）、写方法要有
+`request_id`、IDL 方法要有注释、框架文件不许改、日志走 zlog、`idl.lock` 要新。项目自己的规则写在 IDL 仓库的 `devkit.yaml`
+（本机和 CI 读同一份）：`lint.vendor_service`（调第三方只能在它）、`lint.money_words`（追加金额字段词）、`lint.errors_file`
+（错误码必须登记的表）、`lint.disable`。每条输出都写了该怎么改；有问题退出码 1，CI 停下。某一行确属误报可加 `//devkit:lint-ignore <规则>`。`idl-lock` 规则堵住分仓库的"先推 IDL"陷阱：`make gen` 写 `idl.lock`，
 CI 按这个 IDL 提交构建，锁落后于检出或该提交还没推到服务器时，本机 lint 就报错。
 服务不在项目目录里时（CI）用 `--idl` 指定 IDL 检出。
 

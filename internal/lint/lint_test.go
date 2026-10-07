@@ -19,7 +19,8 @@ var p = rt.Provider("pay")
 // fmt.Println in a comment is fine
 `
 	os.WriteFile(filepath.Join(dir, "a.go"), []byte(src), 0o644)
-	fs, err := checkGoFile(dir, "a.go", false)
+	mg, mn := moneyPattern([]string{"odds"})
+	fs, err := checkGoFile(dir, "a.go", goCheck{isVendor: false, vendorRule: true, moneyGo: mg})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -39,7 +40,8 @@ var p = rt.Provider("pay")
 	if strings.Count(got, "no-float-money") != 1 {
 		t.Errorf("one finding per line: %s", got)
 	}
-	if fs2, _ := checkGoFile(dir, "a.go", true); strings.Contains(joinRules(fs2), "vendor-only") {
+	_ = mn
+	if fs2, _ := checkGoFile(dir, "a.go", goCheck{isVendor: true, vendorRule: true, moneyGo: mg}); strings.Contains(joinRules(fs2), "vendor-only") {
 		t.Error("the vendor service may call providers")
 	}
 }
@@ -81,7 +83,8 @@ service S {
 `
 	p := filepath.Join(dir, "s.thrift")
 	os.WriteFile(p, []byte(idl), 0o644)
-	fs, err := checkIDL(p, true)
+	_, mn := moneyPattern(nil)
+	fs, err := checkIDL(p, true, mn)
 	if err != nil {
 		t.Fatal(err)
 	}

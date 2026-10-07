@@ -38,9 +38,6 @@ type Config struct {
 	Component string `yaml:"component,omitempty"`
 	// Vars are default template variables for `ngs` (e.g. NacosAddr).
 	Vars map[string]string `yaml:"vars,omitempty"`
-	// VendorService is the one service allowed to call third parties
-	// (devkit lint's vendor-only rule). Default ser-vendor.
-	VendorService string `yaml:"vendor_service,omitempty"`
 }
 
 // Find walks up from dir looking for devkit.yaml and returns the directory

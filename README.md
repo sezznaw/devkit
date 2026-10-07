@@ -187,12 +187,16 @@ infrastructure together. A tool not on the list reads the guide when told to.
 ### Lint: the team's rules, enforced
 
 `devkit lint` (what `make lint` runs, locally and in CI) checks a service
-against the conventions in `idl/AGENTS.md`, whoever wrote the code: no
-middleware opened by hand (`rt.DB`, `rt.Redis`, `rt.Kafka`, `rt.S3`,
-`rt.Provider` instead), third-party calls only in the vendor service
-(`vendor_service` in devkit.yaml, default `ser-vendor`), no float money,
-`request_id` on write methods, a comment on every IDL method, business codes
-registered in `idl/errors.md`, framework files untouched, zlog for logging.
+against the team's conventions, whoever wrote the code. The generic rules
+are the same in every project: no middleware opened by hand (`rt.DB`,
+`rt.Redis`, `rt.Kafka`, `rt.S3`, `rt.Provider` instead), no float money
+(amount, balance, price, fee, ...), `request_id` on write methods, a comment
+on every IDL method, framework files untouched, zlog for logging, `idl.lock`
+current. The project's own rules live in the IDL repository's `devkit.yaml`
+(so the laptop and CI read one file): `lint.vendor_service` (third-party
+calls only there), `lint.money_words` (extra money field names),
+`lint.errors_file` (business codes must be registered there),
+`lint.disable`.
 Every finding says what to do instead; exit status 1 stops CI. A line opts
 out of one rule with `//devkit:lint-ignore <rule>`. `idl-lock` closes the
 "push the IDL first" trap of separate repositories: `make gen` writes

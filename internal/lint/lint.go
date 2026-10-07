@@ -35,11 +35,20 @@ func (f Finding) String() string {
 type Options struct {
 	// Root is the service directory (with .devkit/manifest.json).
 	Root string
-	// IDLDir is the project's idl checkout (for errors.md and the service's
-	// IDL); "" disables the IDL rules.
+	// IDLDir is the project's idl checkout (for the service's IDL, the error
+	// table and idl.lock); "" disables the IDL rules.
 	IDLDir string
-	// VendorService is the one service allowed to call third parties.
+	// VendorService is the one service allowed to call third parties; ""
+	// switches the vendor-only rule off.
 	VendorService string
+	// MoneyWords extend the built-in list of field names that must not be
+	// floats (a betting project adds odds, stake, payout).
+	MoneyWords []string
+	// ErrorsFile is the business-code table, relative to IDLDir; "" switches
+	// the error-code rule off.
+	ErrorsFile string
+	// Disable lists rule names to skip.
+	Disable []string
 }
 
 // Ignore marks a line a rule must skip: `//devkit:lint-ignore <rule>` (Go)
@@ -63,8 +72,10 @@ func Run(o Options) ([]Finding, error) {
 	if err != nil {
 		return nil, err
 	}
+	moneyGo, moneyName := moneyPattern(o.MoneyWords)
+	gc := goCheck{isVendor: service == o.VendorService, vendorRule: o.VendorService != "", moneyGo: moneyGo}
 	for _, f := range goFiles {
-		fs, err := checkGoFile(o.Root, f, service == o.VendorService)
+		fs, err := checkGoFile(o.Root, f, gc)
 		if err != nil {
 			return nil, err
 		}
@@ -74,14 +85,29 @@ func Run(o Options) ([]Finding, error) {
 	if o.IDLDir != "" {
 		idl := filepath.Join(o.IDLDir, service, service+".thrift")
 		if _, err := os.Stat(idl); err == nil {
-			fs, err := checkIDL(idl, isAPIService(m))
+			fs, err := checkIDL(idl, isAPIService(m), moneyName)
 			if err != nil {
 				return nil, err
 			}
 			out = append(out, fs...)
 		}
-		out = append(out, checkErrorCodes(o.Root, goFiles, filepath.Join(o.IDLDir, "errors.md"))...)
+		if o.ErrorsFile != "" {
+			out = append(out, checkErrorCodes(o.Root, goFiles, filepath.Join(o.IDLDir, o.ErrorsFile))...)
+		}
 		out = append(out, checkIDLLock(o.Root, o.IDLDir, service)...)
+	}
+	if len(o.Disable) > 0 {
+		off := map[string]bool{}
+		for _, r := range o.Disable {
+			off[r] = true
+		}
+		kept := out[:0]
+		for _, f := range out {
+			if !off[f.Rule] {
+				kept = append(kept, f)
+			}
+		}
+		out = kept
 	}
 	sort.Slice(out, func(i, j int) bool {
 		if out[i].File != out[j].File {
@@ -150,12 +176,28 @@ var goPatterns = []pattern{
 	{regexp.MustCompile(`\bs3\.NewFromConfig\(|\bs3\.New\(|\bminio\.New\(`), "no-direct-middleware", "do not create an S3 client: s3.enabled in conf and rt.S3"},
 	{regexp.MustCompile(`\bgocron\.|\bcron\.New\(|\btime\.NewTicker\(`), "no-direct-middleware", "do not schedule work yourself: a job in app/jobs.go (make jobs / make job NAME=...)"},
 	{regexp.MustCompile(`\bfmt\.Print(ln|f)?\(|\blog\.(Print|Printf|Println|Fatal|Fatalf|Fatalln|Panic|Panicf)\(`), "use-zlog", "log through zlog (zlog.Ctx(ctx).Info(...)), which carries the trace_id; not fmt / log"},
-	{regexp.MustCompile(`(?i)\b(amount|balance|price|odds|fee|stake|payout|total|credit|debit|money)\w*\s+float(32|64)\b`), "no-float-money", "money is never a float: int64 in the smallest unit plus a currency code (ask before adding a money field)"},
 }
 
 var vendorOnly = regexp.MustCompile(`\.Provider\(|\bwebhookx\.`)
 
-func checkGoFile(root, rel string, isVendor bool) ([]Finding, error) {
+// baseMoneyWords are field names that are money in any project.
+var baseMoneyWords = []string{"amount", "balance", "price", "fee", "total", "credit", "debit", "money"}
+
+// moneyPattern matches a Go field "<money word>... float64" or a Thrift
+// field name, built from the base words plus the project's.
+func moneyPattern(extra []string) (goField, name *regexp.Regexp) {
+	words := append(append([]string{}, baseMoneyWords...), extra...)
+	alt := strings.Join(words, "|")
+	return regexp.MustCompile(`(?i)\b(` + alt + `)\w*\s+float(32|64)\b`), regexp.MustCompile(`(?i)(` + alt + `)`)
+}
+
+type goCheck struct {
+	isVendor   bool
+	vendorRule bool
+	moneyGo    *regexp.Regexp
+}
+
+func checkGoFile(root, rel string, c goCheck) ([]Finding, error) {
 	f, err := os.Open(filepath.Join(root, rel))
 	if err != nil {
 		return nil, err
@@ -181,7 +223,10 @@ func checkGoFile(root, rel string, isVendor bool) ([]Finding, error) {
 				out = append(out, Finding{rel, n, p.rule, p.message})
 			}
 		}
-		if !isVendor && vendorOnly.MatchString(code) && !ignored(line, "vendor-only") {
+		if c.moneyGo.MatchString(code) && !ignored(line, "no-float-money") {
+			out = append(out, Finding{rel, n, "no-float-money", "money is never a float: int64 in the smallest unit plus a currency code (ask before adding a money field)"})
+		}
+		if c.vendorRule && !c.isVendor && vendorOnly.MatchString(code) && !ignored(line, "vendor-only") {
 			out = append(out, Finding{rel, n, "vendor-only", "third-party calls and callbacks live in the vendor service only (the one that may leave the cluster); move this to ser-vendor and expose an RPC"})
 		}
 	}
@@ -213,13 +258,12 @@ var (
 	// A method whose name carries a read verb (anywhere, as a camel-case
 	// word: MemberGetProfile, EgressCheck, ListOrders) changes nothing and
 	// needs no request_id. Token issuance counts as a read.
-	readName  = regexp.MustCompile(`(^|[a-z0-9])(Get|List|Query|Find|Search|Count|Check|Ping|Describe|Fetch|Has|Is|Exists|Verify|Preview|Calc|Validate|Health|Stat|Stats|Version|Info|Status|History|Config|Token|Export|Download)([A-Z]|$)`)
-	moneyName = regexp.MustCompile(`(?i)(amount|balance|price|odds|fee|stake|payout|total|credit|debit|money)`)
+	readName = regexp.MustCompile(`(^|[a-z0-9])(Get|List|Query|Find|Search|Count|Check|Ping|Describe|Fetch|Has|Is|Exists|Verify|Preview|Calc|Validate|Health|Stat|Stats|Version|Info|Status|History|Config|Token|Export|Download)([A-Z]|$)`)
 )
 
 // checkIDL reads the service's Thrift: money fields as double, write methods
 // without request_id, methods without a comment.
-func checkIDL(path string, api bool) ([]Finding, error) {
+func checkIDL(path string, api bool, moneyName *regexp.Regexp) ([]Finding, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
 		return nil, err

@@ -16,10 +16,15 @@ var lintCmd = &cobra.Command{
 	Use:   "lint",
 	Short: "Check the service against the team's rules (the ones in idl/AGENTS.md)",
 	Long: `lint checks a service for the team's conventions, whoever (or whatever) wrote
-the code: no middleware opened by hand (rt.DB, rt.Redis, rt.Kafka, rt.S3,
-rt.Provider instead), third-party calls only in the vendor service, no float
-money, request_id on write methods, a comment on every IDL method, business
-codes registered in idl/errors.md, framework files untouched, zlog for logging.
+the code. Generic rules, the same in every project: no middleware opened by
+hand (rt.DB, rt.Redis, rt.Kafka, rt.S3, rt.Provider instead), request_id on
+write methods, a comment on every IDL method, framework files untouched, zlog
+for logging, idl.lock current. Project rules, from <idl>/devkit.yaml:
+  lint:
+    vendor_service: ser-vendor      # third-party calls only here (unset: rule off)
+    money_words: [odds, stake]      # added to amount, balance, price, fee, ... (never floats)
+    errors_file: errors.md          # business codes must be registered here (unset: rule off)
+    disable: []                     # rules this project does not want
 
 Run it inside a service (make lint does), or in the project directory for
 every service. A line can opt out of one rule with a comment:
@@ -49,14 +54,20 @@ Exit status 1 when there are findings, so CI stops.`,
 				idlDir = ""
 			}
 		}
-		ws, _ := workspace.LoadConfig(projectDir)
-		vendor := "ser-vendor"
-		if ws != nil && ws.VendorService != "" {
-			vendor = ws.VendorService
+		// Project rules live in the IDL repository (idl/devkit.yaml), so the
+		// laptop and CI read the same file.
+		var rules workspace.ProjectRules
+		if idlDir != "" {
+			r, err := workspace.LoadProjectRules(idlDir)
+			if err != nil {
+				return err
+			}
+			rules = r
 		}
 		total := 0
 		for _, root := range roots {
-			findings, err := lint.Run(lint.Options{Root: root, IDLDir: idlDir, VendorService: vendor})
+			findings, err := lint.Run(lint.Options{Root: root, IDLDir: idlDir,
+				VendorService: rules.Lint.VendorService, MoneyWords: rules.Lint.MoneyWords, ErrorsFile: rules.Lint.ErrorsFile, Disable: rules.Lint.Disable})
 			if err != nil {
 				return err
 			}

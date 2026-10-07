@@ -345,3 +345,11 @@ idl/AGENTS.md; change both together.
   instead: `make gen` writes `idl.lock` (the IDL checkout's HEAD), CI fetches
   that commit, and lint fails locally when the lock lags the checkout, the
   checkout is dirty, or the commit is not on any remote branch.
+- Project-specific lint settings (v0.7.0) come from `<idl>/devkit.yaml`
+  (`workspace.LoadProjectRules`): `lint.vendor_service` (unset = rule off),
+  `lint.money_words`, `lint.errors_file` (unset = rule off), `lint.disable`.
+  The owner asked 2026-10-07 whether lint was sportsbook-only; the generic
+  rules stay in code, the betting words (odds, stake, payout), ser-vendor and
+  errors.md moved to that file. It sits in the IDL repository because CI has
+  no project directory. `Config.VendorService` in the project devkit.yaml was
+  removed.
