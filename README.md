@@ -170,6 +170,20 @@ IDLS := order/order.thrift user/user.thrift
  Open a pull request in the IDL repository
 for IDL changes. Generated code is never committed; CI regenerates it.
 
+### AI tools
+
+Every mainstream AI coding tool is sent to one file. devkit writes pointer
+files into the project directory (`AGENTS.md`, `CLAUDE.md`, `GEMINI.md`,
+`.cursor/rules/`, `.github/copilot-instructions.md`, `.windsurf/rules/`,
+`.junie/guidelines.md`, `.kiro/steering/`, `.trae/rules/`, `.clinerules/`,
+`.roo/rules/`, `.augment/rules/`, `.continue/rules/`, `.lingma/rules/`,
+`.aider.conf.yml`, `QWEN.md`, `IFLOW.md`, `WARP.md`), each saying only "read
+`idl/AGENTS.md` first". The guide itself lives in the IDL repository, which
+every developer has, so there is one copy to maintain; the pointers are
+rewritten by `ngs`, `nas` and `update`. Start the AI in the project
+directory, not inside a service, so it sees the IDL, the services and the
+infrastructure together. A tool not on the list reads the guide when told to.
+
 ### Ports
 
 Every service gets its port from the project's port table, `idl/ports.yaml`,

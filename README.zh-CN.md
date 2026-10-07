@@ -125,6 +125,15 @@ IDLS := order/order.thrift user/user.thrift
 ```
 IDL 的改动向 IDL 仓库提 PR。生成的代码不提交，CI 会重新生成。
 
+### AI 工具
+
+所有主流 AI 编程工具都被指向同一个文件。devkit 在项目目录写一组指针文件（`AGENTS.md`、`CLAUDE.md`、`GEMINI.md`、
+`.cursor/rules/`、`.github/copilot-instructions.md`、`.windsurf/rules/`、`.junie/guidelines.md`、`.kiro/steering/`、
+`.trae/rules/`、`.clinerules/`、`.roo/rules/`、`.augment/rules/`、`.continue/rules/`、`.lingma/rules/`、`.aider.conf.yml`、
+`QWEN.md`、`IFLOW.md`、`WARP.md`），每个只说一句"先读 `idl/AGENTS.md`"。流程本身放在 IDL 仓库里，每个开发者都有，
+只需维护一份；指针由 `ngs`、`nas`、`update` 重写。在项目目录启动 AI，不要进到某个服务里，这样它同时看得到 IDL、
+各服务和部署。不在列表里的工具，开始时告诉它读这个文件即可。
+
 ### 端口
 
 每个服务的端口来自项目的端口表 `idl/ports.yaml`，由 `devkit ngs` / `devkit nas` 写入：第一个 API 服务是 8080（网关），

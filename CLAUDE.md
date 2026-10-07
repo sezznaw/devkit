@@ -314,3 +314,15 @@ takes the lowest free block of ten from 8100 (`PortBlockStart`, `PortBlockSize`,
 them; the kitex-service template (0.20.0) uses `CallbacksPort` for
 `callbacks.addr`. The file is rewritten whole (sorted by port, bilingual
 header), hand comments are not preserved: it is a table, not a document.
+
+## AI pointer files (v0.4.0)
+
+`internal/workspace/airules.go`: `WriteAIPointers(projectDir)` writes the files
+the mainstream AI tools read automatically, each pointing at `idl/AGENTS.md`
+(the owner's decision 2026-10-07: one guide, in the IDL repository, because
+colleagues use different AI tools and the project directory is not a
+repository). Called from `syncProject`, so `ngs`, `nas` and project-level
+`update` keep them current; identical content is not rewritten. Formats with
+frontmatter: Cursor `.mdc` (alwaysApply), Windsurf (trigger: always_on),
+Kiro (inclusion: always), Augment (type: always), Continue (alwaysApply);
+Aider is a config file with `read:`. `CLAUDE.md` is the import `@AGENTS.md`.

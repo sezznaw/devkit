@@ -75,6 +75,13 @@ func teamValuesOf(comp *registry.Component) teamValues {
 // here are reported, never fatal: the services build without either.
 func syncProject(ctx context.Context, cfg *config.Config, project string, team teamValues, skipCommon bool, log func(string, ...any)) *workspace.CommonState {
 	var state *workspace.CommonState
+	// The AI tools' pointer files: every tool that is opened in the project
+	// directory is sent to idl/AGENTS.md, the one development guide.
+	if written, err := workspace.WriteAIPointers(project); err != nil {
+		log("warning: AI pointer files: %v", err)
+	} else if len(written) > 0 {
+		log("AI tools: %d pointer files -> %s (%s)", len(written), workspace.AIRulesSource, workspace.AIToolList())
+	}
 	// The checkout used to be common/, a name the project needs for itself.
 	if moved, err := workspace.MigrateCommonDir(ctx, project, commonURL(cfg, project)); err != nil {
 		log("warning: %v", err)
