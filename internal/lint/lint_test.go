@@ -1,0 +1,109 @@
+package lint
+
+import (
+	"os"
+	"path/filepath"
+	"strings"
+	"testing"
+)
+
+func TestCheckGoFile(t *testing.T) {
+	dir := t.TempDir()
+	src := `package x
+import "net/http"
+var c = &http.Client{}          // caught
+var r = redis.NewClient(nil)    //devkit:lint-ignore no-direct-middleware
+func f() { fmt.Println("x"); zlog.Info("ok") }
+type Bet struct { Amount float64; Odds float64 }
+var p = rt.Provider("pay")
+// fmt.Println in a comment is fine
+`
+	os.WriteFile(filepath.Join(dir, "a.go"), []byte(src), 0o644)
+	fs, err := checkGoFile(dir, "a.go", false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var rules []string
+	for _, f := range fs {
+		rules = append(rules, f.Rule)
+	}
+	got := strings.Join(rules, ",")
+	for _, want := range []string{"no-direct-middleware", "use-zlog", "no-float-money", "vendor-only"} {
+		if !strings.Contains(got, want) {
+			t.Errorf("missing %s in %s", want, got)
+		}
+	}
+	if strings.Count(got, "no-direct-middleware") != 1 {
+		t.Errorf("the ignored redis line must not count: %s", got)
+	}
+	if strings.Count(got, "no-float-money") != 1 {
+		t.Errorf("one finding per line: %s", got)
+	}
+	if fs2, _ := checkGoFile(dir, "a.go", true); strings.Contains(joinRules(fs2), "vendor-only") {
+		t.Error("the vendor service may call providers")
+	}
+}
+
+func joinRules(fs []Finding) string {
+	var r []string
+	for _, f := range fs {
+		r = append(r, f.Rule)
+	}
+	return strings.Join(r, ",")
+}
+
+func TestCheckIDL(t *testing.T) {
+	dir := t.TempDir()
+	idl := `namespace go x
+struct GetProfileReq {
+    1: i64 uid
+}
+struct UpdateNameReq {
+    1: string request_id
+    2: string name
+}
+struct TransferReq {
+    1: i64 uid
+    2: double amount
+}
+struct Resp {
+    1: i32 code
+}
+service S {
+    // 取资料。
+    Resp MemberGetProfile(1: GetProfileReq req) (api.post="/v1/member/getProfile")
+    // 改名。
+    Resp MemberUpdateName(1: UpdateNameReq req) (api.post="/v1/member/updateName")
+    Resp WalletTransfer(1: TransferReq req) (api.post="/v1/wallet/transfer")
+    // 自检。
+    Resp EgressCheck(1: GetProfileReq req)
+}
+`
+	p := filepath.Join(dir, "s.thrift")
+	os.WriteFile(p, []byte(idl), 0o644)
+	fs, err := checkIDL(p, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := joinRules(fs)
+	if strings.Count(got, "request-id") != 1 || !strings.Contains(fs[len(fs)-1].Message+got, "WalletTransfer") {
+		t.Errorf("only WalletTransfer lacks request_id: %v", fs)
+	}
+	if strings.Count(got, "method-comment") != 1 {
+		t.Errorf("only WalletTransfer lacks a comment: %v", fs)
+	}
+	if strings.Count(got, "no-float-money") != 1 {
+		t.Errorf("amount double: %v", fs)
+	}
+}
+
+func TestCheckErrorCodes(t *testing.T) {
+	dir := t.TempDir()
+	os.WriteFile(filepath.Join(dir, "h.go"), []byte("package h\nconst CodeMemberNotFound = 2001\nconst CodeNew = 2009\nvar e = kerrors.NewBizStatusError(5001, \"x\")\nvar f = kerrors.NewBizStatusError(5009, \"y\") //devkit:lint-ignore error-code\n"), 0o644)
+	md := filepath.Join(dir, "errors.md")
+	os.WriteFile(md, []byte("| code | 含义 |\n|---|---|\n| 2001 | 会员不存在 |\n| 5001 | 下游 |\n"), 0o644)
+	fs := checkErrorCodes(dir, []string{"h.go"}, md)
+	if len(fs) != 1 || !strings.Contains(fs[0].Message, "2009") {
+		t.Errorf("%v", fs)
+	}
+}

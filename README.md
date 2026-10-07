@@ -184,6 +184,19 @@ rewritten by `ngs`, `nas` and `update`. Start the AI in the project
 directory, not inside a service, so it sees the IDL, the services and the
 infrastructure together. A tool not on the list reads the guide when told to.
 
+### Lint: the team's rules, enforced
+
+`devkit lint` (what `make lint` runs, locally and in CI) checks a service
+against the conventions in `idl/AGENTS.md`, whoever wrote the code: no
+middleware opened by hand (`rt.DB`, `rt.Redis`, `rt.Kafka`, `rt.S3`,
+`rt.Provider` instead), third-party calls only in the vendor service
+(`vendor_service` in devkit.yaml, default `ser-vendor`), no float money,
+`request_id` on write methods, a comment on every IDL method, business codes
+registered in `idl/errors.md`, framework files untouched, zlog for logging.
+Every finding says what to do instead; exit status 1 stops CI. A line opts
+out of one rule with `//devkit:lint-ignore <rule>`. `--idl` points at the
+IDL checkout when the service is not inside a project directory (CI).
+
 ### Ports
 
 Every service gets its port from the project's port table, `idl/ports.yaml`,

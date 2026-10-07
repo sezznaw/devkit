@@ -326,3 +326,17 @@ repository). Called from `syncProject`, so `ngs`, `nas` and project-level
 frontmatter: Cursor `.mdc` (alwaysApply), Windsurf (trigger: always_on),
 Kiro (inclusion: always), Augment (type: always), Continue (alwaysApply);
 Aider is a config file with `read:`. `CLAUDE.md` is the import `@AGENTS.md`.
+
+## Lint (v0.5.0)
+
+`internal/lint`: regex-based, deliberately not go/ast: the rules are about
+names and calls, and Thrift has no parser here. Rules and their names:
+no-direct-middleware, vendor-only, no-float-money, request-id, method-comment,
+error-code, framework-file (manifest.CheckFiles), use-zlog. `readName` decides
+what is a read (a read verb as a camel-case word anywhere in the method name,
+e.g. MemberGetProfile, EgressCheck; Token counts as a read). Generated dirs
+and cmd/*/main.go and _test.go are skipped. `//devkit:lint-ignore <rule>` on
+the line opts out. The Makefile template runs `go run
+github.com/sezznaw/devkit@$(DEVKIT_VERSION) lint --idl $(IDL_DIR)` so CI
+needs no devkit installed. The rules mirror the table in the project's
+idl/AGENTS.md; change both together.
