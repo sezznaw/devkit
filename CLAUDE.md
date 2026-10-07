@@ -340,3 +340,8 @@ the line opts out. The Makefile template runs `go run
 github.com/sezznaw/devkit@$(DEVKIT_VERSION) lint --idl $(IDL_DIR)` so CI
 needs no devkit installed. The rules mirror the table in the project's
 idl/AGENTS.md; change both together.
+- `idl-lock` (v0.6.0, `idllock.go`): the owner keeps separate repositories
+  (monorepo refused 2026-10-07), so the "push the IDL first" trap is closed
+  instead: `make gen` writes `idl.lock` (the IDL checkout's HEAD), CI fetches
+  that commit, and lint fails locally when the lock lags the checkout, the
+  checkout is dirty, or the commit is not on any remote branch.

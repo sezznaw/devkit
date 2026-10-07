@@ -194,7 +194,10 @@ middleware opened by hand (`rt.DB`, `rt.Redis`, `rt.Kafka`, `rt.S3`,
 `request_id` on write methods, a comment on every IDL method, business codes
 registered in `idl/errors.md`, framework files untouched, zlog for logging.
 Every finding says what to do instead; exit status 1 stops CI. A line opts
-out of one rule with `//devkit:lint-ignore <rule>`. `--idl` points at the
+out of one rule with `//devkit:lint-ignore <rule>`. `idl-lock` closes the
+"push the IDL first" trap of separate repositories: `make gen` writes
+`idl.lock`, CI builds against that IDL commit, and lint fails before a push
+when the lock lags the checkout or the IDL commit is not on the server. `--idl` points at the
 IDL checkout when the service is not inside a project directory (CI).
 
 ### Ports
