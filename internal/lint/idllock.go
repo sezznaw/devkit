@@ -17,7 +17,7 @@ const IDLLockFile = "idl.lock"
 // checkIDLLock: idl.lock exists, matches the IDL checkout, and the commit
 // it names has been pushed (CI clones the IDL from the server; an unpushed
 // commit fails there, far from the person who could fix it).
-func checkIDLLock(root, idlDir string) []Finding {
+func checkIDLLock(root, idlDir, service string) []Finding {
 	if _, err := os.Stat(filepath.Join(idlDir, ".git")); err != nil {
 		return nil // not a checkout (CI's shallow clone has one; a plain copy does not)
 	}
@@ -32,7 +32,14 @@ func checkIDLLock(root, idlDir string) []Finding {
 	}
 	var out []Finding
 	if want != head {
-		out = append(out, Finding{IDLLockFile, 0, "idl-lock", fmt.Sprintf("names IDL commit %s but the checkout is at %s: run make gen (and commit idl.lock) so the code and the lock match the IDL", short(want), short(head))})
+		// Only the service's own IDL directory matters: a commit that touched
+		// another service's IDL or the docs does not make this code stale.
+		changed, err := git(idlDir, "log", "--oneline", want+".."+head, "--", service+"/")
+		if err != nil {
+			out = append(out, Finding{IDLLockFile, 0, "idl-lock", fmt.Sprintf("names IDL commit %s, which the checkout does not know (checkout at %s): run make gen and commit idl.lock", short(want), short(head))})
+		} else if strings.TrimSpace(changed) != "" {
+			out = append(out, Finding{IDLLockFile, 0, "idl-lock", fmt.Sprintf("%s/ changed in the IDL after commit %s (checkout at %s): run make gen and commit idl.lock so the code matches the IDL", service, short(want), short(head))})
+		}
 	}
 	if dirty, _ := git(idlDir, "status", "--porcelain"); strings.TrimSpace(dirty) != "" {
 		out = append(out, Finding{IDLLockFile, 0, "idl-lock", "the IDL checkout has uncommitted changes: commit and push the IDL first (the service's CI builds against the IDL on the server)"})

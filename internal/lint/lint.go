@@ -81,7 +81,7 @@ func Run(o Options) ([]Finding, error) {
 			out = append(out, fs...)
 		}
 		out = append(out, checkErrorCodes(o.Root, goFiles, filepath.Join(o.IDLDir, "errors.md"))...)
-		out = append(out, checkIDLLock(o.Root, o.IDLDir)...)
+		out = append(out, checkIDLLock(o.Root, o.IDLDir, service)...)
 	}
 	sort.Slice(out, func(i, j int) bool {
 		if out[i].File != out[j].File {
