@@ -37,6 +37,11 @@ func checkIDLLock(root, idlDir string) []Finding {
 	if dirty, _ := git(idlDir, "status", "--porcelain"); strings.TrimSpace(dirty) != "" {
 		out = append(out, Finding{IDLLockFile, 0, "idl-lock", "the IDL checkout has uncommitted changes: commit and push the IDL first (the service's CI builds against the IDL on the server)"})
 	}
+	// CI's shallow clone cannot answer "is it pushed" (it only has the tip);
+	// there the fetch of the locked commit already proved it.
+	if shallow, _ := git(idlDir, "rev-parse", "--is-shallow-repository"); shallow == "true" {
+		return out
+	}
 	if contains, _ := git(idlDir, "branch", "-r", "--contains", want); strings.TrimSpace(contains) == "" {
 		out = append(out, Finding{IDLLockFile, 0, "idl-lock", fmt.Sprintf("IDL commit %s is not on the server yet: push the idl repository before pushing this service, or its CI cannot fetch the IDL", short(want))})
 	}
