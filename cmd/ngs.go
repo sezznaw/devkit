@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 
 	"github.com/spf13/cobra"
@@ -215,6 +216,28 @@ func runNew(ctx context.Context, kind serviceKind, name string) error {
 		return workspace.EnsureRepo(ctx, idlDir, workspace.RepoURL(cfg.GitHubHost, idlRepo), cfg.GitHubToken, cfg.GitHubHost, s.Logf)
 	}); err != nil {
 		return fail(err)
+	}
+	// The service's port comes from the project's port table in the IDL
+	// repository (idl/ports.yaml): the next free block of ten, recorded there
+	// and committed with the IDL. --set Port=... wins and is recorded too.
+	if _, ok := vars["Port"]; !ok {
+		port, assigned, err := workspace.AllocatePort(idlDir, name, kind.needsHz)
+		if err != nil {
+			return fail(err)
+		}
+		vars["Port"] = strconv.Itoa(port)
+		if assigned {
+			block := fmt.Sprintf("block %d-%d", port, port+workspace.PortBlockSize-1)
+			if port == workspace.GatewayPort {
+				block = "the gateway port"
+			}
+			fmt.Fprintf(os.Stderr, "  %s port %d (%s), recorded in idl/%s: commit it with the IDL\n\n", es.Dim("ports  "), port, block, workspace.PortsFile)
+		}
+	}
+	if _, ok := vars["CallbacksPort"]; !ok {
+		if p, err := strconv.Atoi(vars["Port"]); err == nil {
+			vars["CallbacksPort"] = strconv.Itoa(p + 1)
+		}
 	}
 	if err := r.Step("Preparing common library (team version "+team.CommonVersion+")", func(s *ui.Step) error {
 		if ngsFlags.skipCommon {

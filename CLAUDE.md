@@ -301,3 +301,16 @@ download and takes several minutes; use `DEVKIT_PLAIN=1` for readable logs.
   2026-09-19; history from there on is public and must not be rewritten.
 - Docs come in pairs: `README.md` and `README.zh-CN.md` have identical
   structure; change both together.
+
+## Ports (v0.3.0)
+
+`internal/workspace/ports.go`: the project's port table is `idl/ports.yaml`
+(in the IDL checkout, not devkit.yaml, because the project directory is not
+a repository and every developer has the IDL). `AllocatePort(idlDir, name,
+api)`: existing entry wins; the first API service gets 8080; everything else
+takes the lowest free block of ten from 8100 (`PortBlockStart`, `PortBlockSize`,
+`PortBlockEnd` 8990). `runNew` calls it after the IDL step and sets
+`vars["Port"]` and `vars["CallbacksPort"]` (= Port + 1) unless `--set` gave
+them; the kitex-service template (0.20.0) uses `CallbacksPort` for
+`callbacks.addr`. The file is rewritten whole (sorted by port, bilingual
+header), hand comments are not preserved: it is a table, not a document.

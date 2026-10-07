@@ -170,6 +170,19 @@ IDLS := order/order.thrift user/user.thrift
  Open a pull request in the IDL repository
 for IDL changes. Generated code is never committed; CI regenerates it.
 
+### Ports
+
+Every service gets its port from the project's port table, `idl/ports.yaml`,
+which `devkit ngs` / `devkit nas` write: the first API service is 8080 (the
+gateway), every other service owns a block of ten from 8100 on (8100-8109,
+8110-8119, ...): `+0` is the RPC or HTTP port, `+1` the callback listener,
+`+2`..`+9` are reserved. A service uses the same port in every environment,
+and the deployment's values follow it. The table lives in the IDL repository
+because every developer has that checkout; commit it together with the new
+service's IDL. `--set Port=...` still wins. On a laptop, 9000-9999 are
+port-forwards to the shared dev environment (port + 1000) and 10000+ are
+operations tools, so nothing a service gets collides with them.
+
 ## CI
 
 The service gets the pipeline that matches where it is hosted, judged from
