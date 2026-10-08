@@ -72,6 +72,9 @@ struct TransferReq {
     5: list<common.Money> payouts
     6: string currency_note
     7: i64 total
+    8: double odds
+    9: string fee_rate
+    10: common.Decimal fx_rate
 }
 struct Resp {
     1: i32 code
@@ -100,14 +103,13 @@ service S {
 	if strings.Count(got, "method-comment") != 1 {
 		t.Errorf("only WalletTransfer lacks a comment: %v", fs)
 	}
-	if strings.Count(got, "no-float-money") != 1 {
-		t.Errorf("amount double: %v", fs)
+	if strings.Count(got, "no-float-money") != 2 {
+		t.Errorf("amount double and odds double: %v", fs)
 	}
-	msgs := ""
-	for _, f := range fs {
-		msgs += f.Message + "\n"
+	if strings.Count(got, "rate-type") != 1 || !strings.Contains(joinMessages(fs), "TransferReq.fee_rate") {
+		t.Errorf("only fee_rate string is the wrong rate type: %v", fs)
 	}
-	if strings.Count(got, "money-type") != 1 || !strings.Contains(msgs, "TransferReq.fee") {
+	if strings.Count(got, "money-type") != 1 || !strings.Contains(joinMessages(fs), "TransferReq.fee is") {
 		t.Errorf("only fee i64 is the wrong money type: %v", fs)
 	}
 }
@@ -121,4 +123,12 @@ func TestCheckErrorCodes(t *testing.T) {
 	if len(fs) != 1 || !strings.Contains(fs[0].Message, "2009") {
 		t.Errorf("%v", fs)
 	}
+}
+
+func joinMessages(fs []Finding) string {
+	out := ""
+	for _, f := range fs {
+		out += f.Message + "\n"
+	}
+	return out
 }

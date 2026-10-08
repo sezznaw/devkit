@@ -181,7 +181,30 @@ var goPatterns = []pattern{
 var vendorOnly = regexp.MustCompile(`\.Provider\(|\bwebhookx\.`)
 
 // baseMoneyWords are field names that are money in any project.
-var baseMoneyWords = []string{"amount", "balance", "price", "fee", "total", "credit", "debit", "money"}
+var baseMoneyWords = []string{"amount", "balance", "price", "fee", "total", "credit", "debit", "money", "stake", "payout", "bonus", "turnover", "commission"}
+
+// baseRateWords are field names that are a ratio in any project: odds, a
+// fee rate, an FX rate, a percentage. They are common.Decimal (a string),
+// never double and never Money.
+var baseRateWords = []string{"odds", "rate", "ratio", "percent", "pct", "multiplier"}
+
+var rateName = regexp.MustCompile(`(?i)(` + strings.Join(baseRateWords, "|") + `)`)
+
+// isRateType: common.Decimal / Decimal, or a container of it.
+func isRateType(typ string) bool {
+	t := strings.TrimSpace(typ)
+	if strings.HasSuffix(t, ".Decimal") || t == "Decimal" {
+		return true
+	}
+	if i := strings.Index(t, "<"); i >= 0 && strings.HasSuffix(t, ">") {
+		inner := strings.TrimSpace(t[i+1 : len(t)-1])
+		if j := strings.LastIndex(inner, ","); j >= 0 {
+			inner = strings.TrimSpace(inner[j+1:])
+		}
+		return isRateType(inner)
+	}
+	return false
+}
 
 // moneyPattern matches a Go field "<money word>... float64" or a Thrift
 // field name, built from the base words plus the project's.
@@ -314,10 +337,15 @@ func checkIDL(path string, api bool, moneyName *regexp.Regexp) ([]Finding, error
 		if m := fieldRE.FindStringSubmatch(line); m != nil {
 			typ, name := strings.TrimSpace(m[1]), m[2]
 			fields[cur][name] = true
-			if typ == "double" && moneyName.MatchString(name) && !ignored(line, "no-float-money") {
-				out = append(out, Finding{rel, i + 1, "no-float-money", fmt.Sprintf("%s.%s is double: money is i64 in the smallest unit plus a currency code", cur, name)})
-			} else if moneyName.MatchString(name) && !countField(name) && !isMoneyType(typ) && !ignored(line, "money-type") {
-				out = append(out, Finding{rel, i + 1, "money-type", fmt.Sprintf("%s.%s is %s: a money field is common.Money (include \"../common/common.thrift\"; amount in the smallest unit plus a currency code), or list<common.Money>", cur, name, typ)})
+			isRate := rateName.MatchString(name)
+			isMoney := moneyName.MatchString(name) && !countField(name) && !isRate
+			switch {
+			case typ == "double" && (isMoney || isRate) && !ignored(line, "no-float-money"):
+				out = append(out, Finding{rel, i + 1, "no-float-money", fmt.Sprintf("%s.%s is double: money is common.Money and a rate is common.Decimal (strings; floats cannot hold 0.1)", cur, name)})
+			case isMoney && !isMoneyType(typ) && !ignored(line, "money-type"):
+				out = append(out, Finding{rel, i + 1, "money-type", fmt.Sprintf("%s.%s is %s: a money field is common.Money (include \"../common/common.thrift\"; a decimal amount string plus a currency code), or list<common.Money>", cur, name, typ)})
+			case isRate && !isRateType(typ) && !ignored(line, "rate-type"):
+				out = append(out, Finding{rel, i + 1, "rate-type", fmt.Sprintf("%s.%s is %s: odds, fee rates, FX rates and percentages are common.Decimal (include \"../common/common.thrift\"; a decimal string like \"1.85\")", cur, name, typ)})
 			}
 		}
 	}
