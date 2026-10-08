@@ -67,6 +67,11 @@ struct UpdateNameReq {
 struct TransferReq {
     1: i64 uid
     2: double amount
+    3: i64 fee
+    4: common.Money stake
+    5: list<common.Money> payouts
+    6: string currency_note
+    7: i64 total
 }
 struct Resp {
     1: i32 code
@@ -97,6 +102,13 @@ service S {
 	}
 	if strings.Count(got, "no-float-money") != 1 {
 		t.Errorf("amount double: %v", fs)
+	}
+	msgs := ""
+	for _, f := range fs {
+		msgs += f.Message + "\n"
+	}
+	if strings.Count(got, "money-type") != 1 || !strings.Contains(msgs, "TransferReq.fee") {
+		t.Errorf("only fee i64 is the wrong money type: %v", fs)
 	}
 }
 
