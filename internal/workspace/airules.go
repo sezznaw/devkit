@@ -1,6 +1,7 @@
 package workspace
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -20,37 +21,81 @@ Read idl/AGENTS.md in full before starting any task. It is the project's only de
 // automatically from the project directory, each pointing at AIRulesSource.
 // Written by devkit (ngs / nas / update) and safe to overwrite: they are
 // pointers, not content. A tool missing here reads the source when told to.
-var AIPointerFiles = []struct {
+var AIPointerFiles = []AIPointer{
+	{"agents", "AGENTS.md", "Codex, Cursor, GitHub Copilot, Gemini CLI, Zed, Amp, Jules, OpenCode, Warp (any tool that reads AGENTS.md)", aiPointer, nil},
+	{"claude", "CLAUDE.md", "Claude Code", "@AGENTS.md\n", []string{"agents"}},
+	{"gemini", "GEMINI.md", "Gemini CLI", aiPointer, nil},
+	{"qwen", "QWEN.md", "Qwen Code", aiPointer, nil},
+	{"iflow", "IFLOW.md", "iFlow CLI", aiPointer, nil},
+	{"warp", "WARP.md", "Warp", aiPointer, nil},
+	{"copilot", ".github/copilot-instructions.md", "GitHub Copilot (VS Code, JetBrains)", aiPointer, nil},
+	{"cursor", ".cursor/rules/project.mdc", "Cursor", "---\ndescription: 项目开发流程 / project development flow\nalwaysApply: true\n---\n" + aiPointer, nil},
+	{"windsurf", ".windsurf/rules/project.md", "Windsurf", "---\ntrigger: always_on\n---\n" + aiPointer, nil},
+	{"junie", ".junie/guidelines.md", "JetBrains Junie", aiPointer, nil},
+	{"kiro", ".kiro/steering/project.md", "Kiro", "---\ninclusion: always\n---\n" + aiPointer, nil},
+	{"trae", ".trae/rules/project_rules.md", "Trae", aiPointer, nil},
+	{"cline", ".clinerules/project.md", "Cline", aiPointer, nil},
+	{"roo", ".roo/rules/project.md", "Roo Code", aiPointer, nil},
+	{"augment", ".augment/rules/project.md", "Augment", "---\ntype: always\n---\n" + aiPointer, nil},
+	{"continue", ".continue/rules/project.md", "Continue", "---\nalwaysApply: true\n---\n" + aiPointer, nil},
+	{"lingma", ".lingma/rules/project.md", "通义灵码 Lingma", aiPointer, nil},
+	{"aider", ".aider.conf.yml", "Aider", "# devkit: Aider reads these files into every chat\nread:\n  - idl/AGENTS.md\n", nil},
+}
+
+// AIPointer is one tool's pointer file. Needs lists other keys the file
+// depends on (CLAUDE.md imports AGENTS.md).
+type AIPointer struct {
+	Key     string
 	Path    string
 	Tools   string
 	Content string
-}{
-	{"AGENTS.md", "Codex, Cursor, GitHub Copilot, Gemini CLI, Zed, Amp, Jules, OpenCode, Warp", aiPointer},
-	{"CLAUDE.md", "Claude Code", "@AGENTS.md\n"},
-	{"GEMINI.md", "Gemini CLI", aiPointer},
-	{"QWEN.md", "Qwen Code", aiPointer},
-	{"IFLOW.md", "iFlow CLI", aiPointer},
-	{"WARP.md", "Warp", aiPointer},
-	{".github/copilot-instructions.md", "GitHub Copilot (VS Code, JetBrains)", aiPointer},
-	{".cursor/rules/project.mdc", "Cursor", "---\ndescription: 项目开发流程 / project development flow\nalwaysApply: true\n---\n" + aiPointer},
-	{".windsurf/rules/project.md", "Windsurf", "---\ntrigger: always_on\n---\n" + aiPointer},
-	{".junie/guidelines.md", "JetBrains Junie", aiPointer},
-	{".kiro/steering/project.md", "Kiro", "---\ninclusion: always\n---\n" + aiPointer},
-	{".trae/rules/project_rules.md", "Trae", aiPointer},
-	{".clinerules/project.md", "Cline", aiPointer},
-	{".roo/rules/project.md", "Roo Code", aiPointer},
-	{".augment/rules/project.md", "Augment", "---\ntype: always\n---\n" + aiPointer},
-	{".continue/rules/project.md", "Continue", "---\nalwaysApply: true\n---\n" + aiPointer},
-	{".lingma/rules/project.md", "通义灵码 Lingma", aiPointer},
-	{".aider.conf.yml", "Aider", "# devkit: Aider reads these files into every chat\nread:\n  - idl/AGENTS.md\n"},
+	Needs   []string
 }
 
-// WriteAIPointers writes (or rewrites) the pointer files in dir. It returns
-// the paths written. A file with the same content is left untouched, so a
-// repeated run is quiet.
-func WriteAIPointers(dir string) ([]string, error) {
-	var written []string
+// FindAIPointer looks a tool up by key.
+func FindAIPointer(key string) (AIPointer, bool) {
 	for _, f := range AIPointerFiles {
+		if f.Key == key {
+			return f, true
+		}
+	}
+	return AIPointer{}, false
+}
+
+// SelectAIPointers resolves keys (plus what they need) in list order;
+// "all" means every tool.
+func SelectAIPointers(keys []string) ([]AIPointer, error) {
+	want := map[string]bool{}
+	for _, k := range keys {
+		if k == "all" {
+			for _, f := range AIPointerFiles {
+				want[f.Key] = true
+			}
+			continue
+		}
+		f, ok := FindAIPointer(k)
+		if !ok {
+			return nil, fmt.Errorf("unknown AI tool %q; devkit ai lists the known ones", k)
+		}
+		want[k] = true
+		for _, n := range f.Needs {
+			want[n] = true
+		}
+	}
+	var out []AIPointer
+	for _, f := range AIPointerFiles {
+		if want[f.Key] {
+			out = append(out, f)
+		}
+	}
+	return out, nil
+}
+
+// WriteAIPointers writes (or rewrites) the given pointer files in dir and
+// returns the paths written. A file with the same content is left untouched.
+func WriteAIPointers(dir string, files []AIPointer) ([]string, error) {
+	var written []string
+	for _, f := range files {
 		p := filepath.Join(dir, f.Path)
 		if cur, err := os.ReadFile(p); err == nil && string(cur) == f.Content {
 			continue
@@ -79,4 +124,45 @@ func AIToolList() string {
 		}
 	}
 	return strings.Join(out, ", ")
+}
+
+// PresentAIPointers says which tools' files exist in dir, and whether each
+// is devkit's (same content) or the person's own.
+func PresentAIPointers(dir string) map[string]string {
+	out := map[string]string{}
+	for _, f := range AIPointerFiles {
+		cur, err := os.ReadFile(filepath.Join(dir, f.Path))
+		if err != nil {
+			continue
+		}
+		if string(cur) == f.Content {
+			out[f.Key] = "devkit"
+		} else {
+			out[f.Key] = "yours"
+		}
+	}
+	return out
+}
+
+// CleanAIPointers removes the pointer files devkit wrote (content unchanged;
+// a file the person edited is kept) and the directories left empty.
+func CleanAIPointers(dir string) ([]string, error) {
+	var removed []string
+	for _, f := range AIPointerFiles {
+		p := filepath.Join(dir, f.Path)
+		cur, err := os.ReadFile(p)
+		if err != nil || string(cur) != f.Content {
+			continue
+		}
+		if err := os.Remove(p); err != nil {
+			return removed, err
+		}
+		removed = append(removed, f.Path)
+		for d := filepath.Dir(p); d != dir; d = filepath.Dir(d) {
+			if os.Remove(d) != nil { // not empty, or gone
+				break
+			}
+		}
+	}
+	return removed, nil
 }

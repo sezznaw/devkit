@@ -172,17 +172,17 @@ for IDL changes. Generated code is never committed; CI regenerates it.
 
 ### AI tools
 
-Every mainstream AI coding tool is sent to one file. devkit writes pointer
-files into the project directory (`AGENTS.md`, `CLAUDE.md`, `GEMINI.md`,
-`.cursor/rules/`, `.github/copilot-instructions.md`, `.windsurf/rules/`,
-`.junie/guidelines.md`, `.kiro/steering/`, `.trae/rules/`, `.clinerules/`,
-`.roo/rules/`, `.augment/rules/`, `.continue/rules/`, `.lingma/rules/`,
-`.aider.conf.yml`, `QWEN.md`, `IFLOW.md`, `WARP.md`), each saying only "read
-`idl/AGENTS.md` first". The guide itself lives in the IDL repository, which
-every developer has, so there is one copy to maintain; the pointers are
-rewritten by `ngs`, `nas` and `update`. Start the AI in the project
-directory, not inside a service, so it sees the IDL, the services and the
-infrastructure together. A tool not on the list reads the guide when told to.
+The project's development guide for AI coding tools is one file,
+`idl/AGENTS.md`, in the IDL repository every developer has. Each tool reads
+a differently named file on start, so `devkit ai <tool>` writes that pointer
+in the project directory for the tool you use (`devkit ai` lists them:
+claude, cursor, copilot, gemini, windsurf, junie, kiro, trae, cline, roo,
+augment, continue, lingma, aider, qwen, iflow, warp, or `agents` for any
+tool that reads AGENTS.md); `--all` writes every one, `--clean` removes what
+devkit wrote. Nothing is written unasked, so the directory holds only what
+is in use. Start the AI in the project directory, not inside a service, so
+it sees the IDL, the services and the infrastructure together. A tool
+without a pointer reads the guide when told to.
 
 ### Lint: the team's rules, enforced
 

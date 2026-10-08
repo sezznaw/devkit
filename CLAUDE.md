@@ -315,41 +315,18 @@ them; the kitex-service template (0.20.0) uses `CallbacksPort` for
 `callbacks.addr`. The file is rewritten whole (sorted by port, bilingual
 header), hand comments are not preserved: it is a table, not a document.
 
-## AI pointer files (v0.4.0)
+## AI pointer files (v0.4.0, reworked v0.8.0)
 
-`internal/workspace/airules.go`: `WriteAIPointers(projectDir)` writes the files
-the mainstream AI tools read automatically, each pointing at `idl/AGENTS.md`
-(the owner's decision 2026-10-07: one guide, in the IDL repository, because
-colleagues use different AI tools and the project directory is not a
-repository). Called from `syncProject`, so `ngs`, `nas` and project-level
-`update` keep them current; identical content is not rewritten. Formats with
-frontmatter: Cursor `.mdc` (alwaysApply), Windsurf (trigger: always_on),
-Kiro (inclusion: always), Augment (type: always), Continue (alwaysApply);
-Aider is a config file with `read:`. `CLAUDE.md` is the import `@AGENTS.md`.
-
-## Lint (v0.5.0)
-
-`internal/lint`: regex-based, deliberately not go/ast: the rules are about
-names and calls, and Thrift has no parser here. Rules and their names:
-no-direct-middleware, vendor-only, no-float-money, request-id, method-comment,
-error-code, framework-file (manifest.CheckFiles), use-zlog. `readName` decides
-what is a read (a read verb as a camel-case word anywhere in the method name,
-e.g. MemberGetProfile, EgressCheck; Token counts as a read). Generated dirs
-and cmd/*/main.go and _test.go are skipped. `//devkit:lint-ignore <rule>` on
-the line opts out. The Makefile template runs `go run
-github.com/sezznaw/devkit@$(DEVKIT_VERSION) lint --idl $(IDL_DIR)` so CI
-needs no devkit installed. The rules mirror the table in the project's
-idl/AGENTS.md; change both together.
-- `idl-lock` (v0.6.0, `idllock.go`): the owner keeps separate repositories
-  (monorepo refused 2026-10-07), so the "push the IDL first" trap is closed
-  instead: `make gen` writes `idl.lock` (the IDL checkout's HEAD), CI fetches
-  that commit, and lint fails locally when the lock lags the checkout, the
-  checkout is dirty, or the commit is not on any remote branch.
-- Project-specific lint settings (v0.7.0) come from `<idl>/devkit.yaml`
-  (`workspace.LoadProjectRules`): `lint.vendor_service` (unset = rule off),
-  `lint.money_words`, `lint.errors_file` (unset = rule off), `lint.disable`.
-  The owner asked 2026-10-07 whether lint was sportsbook-only; the generic
-  rules stay in code, the betting words (odds, stake, payout), ser-vendor and
-  errors.md moved to that file. It sits in the IDL repository because CI has
-  no project directory. `Config.VendorService` in the project devkit.yaml was
-  removed.
+`internal/workspace/airules.go`: `AIPointerFiles` (key, path, content,
+Needs) are the files the mainstream AI tools read on start, each pointing at
+`idl/AGENTS.md` (owner's decision 2026-10-07: one guide, in the IDL
+repository, because colleagues use different tools and the project directory
+is not a repository). v0.4.0 wrote all 18 from `syncProject`; the owner found
+the directory cluttered, so since v0.8.0 nothing is written unasked:
+`devkit ai [tool...]` (cmd/ai.go) writes the chosen ones (`claude` pulls in
+`agents` through Needs, since CLAUDE.md is `@AGENTS.md`), `--all`, `--clean`
+(removes only files whose content is still devkit's, then empty dirs), no
+args lists tools with `[devkit]`/`[yours]` marks. `syncProject` only prints a
+tip when no pointer exists. Formats with frontmatter: Cursor `.mdc`
+(alwaysApply), Windsurf (trigger: always_on), Kiro (inclusion: always),
+Augment (type: always), Continue (alwaysApply); Aider is a config file.

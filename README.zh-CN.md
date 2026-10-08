@@ -127,12 +127,11 @@ IDL 的改动向 IDL 仓库提 PR。生成的代码不提交，CI 会重新生�
 
 ### AI 工具
 
-所有主流 AI 编程工具都被指向同一个文件。devkit 在项目目录写一组指针文件（`AGENTS.md`、`CLAUDE.md`、`GEMINI.md`、
-`.cursor/rules/`、`.github/copilot-instructions.md`、`.windsurf/rules/`、`.junie/guidelines.md`、`.kiro/steering/`、
-`.trae/rules/`、`.clinerules/`、`.roo/rules/`、`.augment/rules/`、`.continue/rules/`、`.lingma/rules/`、`.aider.conf.yml`、
-`QWEN.md`、`IFLOW.md`、`WARP.md`），每个只说一句"先读 `idl/AGENTS.md`"。流程本身放在 IDL 仓库里，每个开发者都有，
-只需维护一份；指针由 `ngs`、`nas`、`update` 重写。在项目目录启动 AI，不要进到某个服务里，这样它同时看得到 IDL、
-各服务和部署。不在列表里的工具，开始时告诉它读这个文件即可。
+给 AI 编程工具看的开发流程只有一份：IDL 仓库里的 `idl/AGENTS.md`，每个开发者都有。各工具启动时读的文件名不同，
+所以用 `devkit ai <工具>` 在项目目录为你用的那个工具写一个指针文件（`devkit ai` 列出全部：claude、cursor、copilot、
+gemini、windsurf、junie、kiro、trae、cline、roo、augment、continue、lingma、aider、qwen、iflow、warp，以及任何认 AGENTS.md
+的工具用 `agents`）；`--all` 全写，`--clean` 删掉 devkit 写过的。不主动写任何文件，项目目录里只有正在用的。
+在项目目录启动 AI，不要进到某个服务里，这样它同时看得到 IDL、各服务和部署。没有指针文件的工具，开始时告诉它读这个文件。
 
 ### Lint：团队规矩的机器检查
 
