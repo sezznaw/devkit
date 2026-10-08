@@ -270,7 +270,7 @@ registry 仓库是私有的或配置不对。执行 `devkit config set github_to
 
 ## 维护者须知
 
-**仓库。** `devkit`（本 CLI）、`devkit-registry`（`kitex-service` 模板，格式见 [docs/registry.md](docs/registry.md)）、`common`（每个服务都会 import 的共享 Go 库），以及每个项目一个 IDL 仓库。
+**仓库。** `devkit`（本 CLI）、`devkit-registry`（`kitex-service` 模板，格式见 [docs/registry.md](docs/registry.md)）、`devkit-common`（每个服务都会 import 的共享 Go 库），以及每个项目一个 IDL 仓库。
 
 **全局配置** 在 `~/.devkit/config.yaml`，由 `install.sh` 写入。隐藏命令 `devkit config show|set` 可以编辑它；每个键也都有对应的环境变量。
 

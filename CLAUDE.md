@@ -11,7 +11,7 @@ configuration; `devkit.yaml` in the project directory is optional. `devkit updat
 live in a separate git repo, `devkit-registry` (sibling checkout at
 `../devkit-registry`), fetched from GitHub; shared runtime code is the Go
 module `github.com/sezznaw/devkit-common` (GitHub repo `sezznaw/devkit-common`,
-sibling checkout at `../common`; the local directory name differs from the
+sibling checkout at `../devkit-common` (renamed from `../common` on 2026-10-08, so the local directory name now matches the
 repo name).
 
 The visible command surface is deliberately tiny: `ngs`, `nas` (asked for by the
