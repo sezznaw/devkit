@@ -1,9 +1,9 @@
 package lint
 
 import (
-	"regexp"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"testing"
 )
