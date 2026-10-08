@@ -162,3 +162,25 @@ func (r *Repo) Notify() error { return r.events.Publish(ctx, "events.member", "1
 		t.Errorf("Publish without a transaction is fine: %v", fs)
 	}
 }
+
+func TestBindRule(t *testing.T) {
+	dir := t.TempDir()
+	os.MkdirAll(filepath.Join(dir, "handler"), 0o755)
+	os.WriteFile(filepath.Join(dir, "handler", "h.go"), []byte(`package handler
+func A(ctx context.Context, c *app.RequestContext) {
+	var req X
+	if err := c.BindAndValidate(&req); err != nil { return }
+}
+func B(ctx context.Context, c *app.RequestContext) {
+	var req X
+	if !hertzx.Bind(c, &req) { return }
+}
+`), 0o644)
+	fs, err := checkGoFile(dir, "handler/h.go", goCheck{moneyGo: regexp.MustCompile(`$^`)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Count(joinRules(fs), "bind") != 1 {
+		t.Errorf("one BindAndValidate: %v", fs)
+	}
+}

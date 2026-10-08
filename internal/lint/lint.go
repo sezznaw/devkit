@@ -282,6 +282,9 @@ func checkGoFile(root, rel string, c goCheck) ([]Finding, error) {
 				out = append(out, Finding{rel, n, p.rule, p.message})
 			}
 		}
+		if strings.Contains(code, "c.BindAndValidate(") && !ignored(line, "bind") {
+			out = append(out, Finding{rel, n, "bind", "use hertzx.Bind(c, &req) (returns false after answering {code:1001, msg:\"<field>: <rule>\"}) instead of c.BindAndValidate: every parameter error must look the same; the IDL's api.vd rules are checked by it"})
+		}
 		if inTx && directPublish.MatchString(code) && !ignored(line, "outbox") {
 			out = append(out, Finding{rel, n, "outbox", "this file runs a database transaction: an event that belongs with the change goes through rt.Kafka.PublishTx(ctx, tx, ...) inside it (the outbox), not Publish; keep Publish only for events without a transaction behind them"})
 		}
