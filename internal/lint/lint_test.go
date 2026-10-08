@@ -1,6 +1,7 @@
 package lint
 
 import (
+	"regexp"
 	"os"
 	"path/filepath"
 	"strings"
@@ -131,4 +132,33 @@ func joinMessages(fs []Finding) string {
 		out += f.Message + "\n"
 	}
 	return out
+}
+
+func TestOutboxRule(t *testing.T) {
+	dir := t.TempDir()
+	os.MkdirAll(filepath.Join(dir, "repo"), 0o755)
+	os.WriteFile(filepath.Join(dir, "repo", "wallet.go"), []byte(`package repo
+func (r *Repo) Debit() error {
+	return r.db.Transaction(func(tx *gorm.DB) error {
+		_ = r.events.Publish(ctx, "events.wallet", "1", "wallet.debited", d)
+		return r.events.PublishTx(ctx, tx, "events.wallet", "1", "wallet.debited", d)
+	})
+}
+`), 0o644)
+	os.WriteFile(filepath.Join(dir, "repo", "notify.go"), []byte(`package repo
+func (r *Repo) Notify() error { return r.events.Publish(ctx, "events.member", "1", "member.updated", d) }
+`), 0o644)
+	_, mn := moneyPattern(nil)
+	_ = mn
+	fs, err := checkGoFile(dir, "repo/wallet.go", goCheck{moneyGo: regexp.MustCompile(`$^`)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Count(joinRules(fs), "outbox") != 1 {
+		t.Errorf("Publish inside a transaction file: %v", fs)
+	}
+	fs, _ = checkGoFile(dir, "repo/notify.go", goCheck{moneyGo: regexp.MustCompile(`$^`)})
+	if strings.Contains(joinRules(fs), "outbox") {
+		t.Errorf("Publish without a transaction is fine: %v", fs)
+	}
 }

@@ -244,7 +244,19 @@ type goCheck struct {
 	moneyGo    *regexp.Regexp
 }
 
+// directPublish is rt.Kafka.Publish / s.events.Publish: fine on its own,
+// wrong inside code that also runs a database transaction (the event
+// belongs in it: PublishTx).
+var directPublish = regexp.MustCompile(`\b(Kafka|events|Events|kafka|producer|Producer)\.Publish\(`)
+
+var runsTransaction = regexp.MustCompile(`\.Transaction\(|WithTx\(`)
+
 func checkGoFile(root, rel string, c goCheck) ([]Finding, error) {
+	whole, err := os.ReadFile(filepath.Join(root, rel))
+	if err != nil {
+		return nil, err
+	}
+	inTx := runsTransaction.Match(whole)
 	f, err := os.Open(filepath.Join(root, rel))
 	if err != nil {
 		return nil, err
@@ -269,6 +281,9 @@ func checkGoFile(root, rel string, c goCheck) ([]Finding, error) {
 			if p.re.MatchString(code) && !ignored(line, p.rule) {
 				out = append(out, Finding{rel, n, p.rule, p.message})
 			}
+		}
+		if inTx && directPublish.MatchString(code) && !ignored(line, "outbox") {
+			out = append(out, Finding{rel, n, "outbox", "this file runs a database transaction: an event that belongs with the change goes through rt.Kafka.PublishTx(ctx, tx, ...) inside it (the outbox), not Publish; keep Publish only for events without a transaction behind them"})
 		}
 		if c.moneyGo.MatchString(code) && !ignored(line, "no-float-money") {
 			out = append(out, Finding{rel, n, "no-float-money", "money is never a float: int64 in the smallest unit plus a currency code (ask before adding a money field)"})
