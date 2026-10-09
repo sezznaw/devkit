@@ -67,7 +67,7 @@ Exit status 1 when there are findings, so CI stops.`,
 		total := 0
 		for _, root := range roots {
 			findings, err := lint.Run(lint.Options{Root: root, IDLDir: idlDir,
-				VendorService: rules.Lint.VendorService, MoneyWords: rules.Lint.MoneyWords, ErrorsFile: rules.Lint.ErrorsFile, Disable: rules.Lint.Disable})
+				VendorService: rules.Lint.VendorService, ReportService: rules.Lint.ReportService, MoneyWords: rules.Lint.MoneyWords, ErrorsFile: rules.Lint.ErrorsFile, Disable: rules.Lint.Disable})
 			if err != nil {
 				return err
 			}

@@ -24,6 +24,9 @@ type ProjectRules struct {
 // (middleware, zlog, framework files, method comments, request_id, idl.lock)
 // need no configuration.
 type LintRules struct {
+	// ReportService is the one service allowed to open the report database
+	// (report.enabled, rule report-only). Empty: the rule is off.
+	ReportService string `yaml:"report_service"`
 	// VendorService is the one service allowed to call third parties
 	// (rule vendor-only). Empty: the rule is off.
 	VendorService string `yaml:"vendor_service"`

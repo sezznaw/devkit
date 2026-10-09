@@ -185,6 +185,17 @@ func A() {
 	}
 }
 
+func TestReportOnlyRule(t *testing.T) {
+	dir := t.TempDir()
+	os.MkdirAll(filepath.Join(dir, "conf"), 0o755)
+	os.WriteFile(filepath.Join(dir, "conf", "dev.yaml"), []byte("mysql:\n  enabled: true\nreport:\n  source: platform\n  enabled: true\n"), 0o644)
+	os.WriteFile(filepath.Join(dir, "conf", "local.yaml"), []byte("report:\n  enabled: false\n"), 0o644)
+	fs := checkReportOnly(dir, "ser-report")
+	if len(fs) != 1 || fs[0].Rule != "report-only" || fs[0].File != "conf/dev.yaml" {
+		t.Fatalf("%v", fs)
+	}
+}
+
 func TestTestsRule(t *testing.T) {
 	dir := t.TempDir()
 	os.MkdirAll(filepath.Join(dir, "handler", "ser_api"), 0o755)

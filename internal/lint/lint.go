@@ -38,6 +38,9 @@ type Options struct {
 	// IDLDir is the project's idl checkout (for the service's IDL, the error
 	// table and idl.lock); "" disables the IDL rules.
 	IDLDir string
+	// ReportService is the one service allowed to open the report database
+	// (report.enabled in conf); "" switches the rule off.
+	ReportService string
 	// VendorService is the one service allowed to call third parties; ""
 	// switches the vendor-only rule off.
 	VendorService string
@@ -83,6 +86,9 @@ func Run(o Options) ([]Finding, error) {
 	}
 	out = append(out, checkFrameworkFiles(o.Root, m)...)
 	out = append(out, checkTests(o.Root)...)
+	if o.ReportService != "" && service != o.ReportService {
+		out = append(out, checkReportOnly(o.Root, o.ReportService)...)
+	}
 	if o.IDLDir != "" {
 		idl := filepath.Join(o.IDLDir, service, service+".thrift")
 		if _, err := os.Stat(idl); err == nil {
@@ -320,6 +326,27 @@ func checkGoFile(root, rel string, c goCheck) ([]Finding, error) {
 		}
 	}
 	return out, sc.Err()
+}
+
+var reportEnabled = regexp.MustCompile(`(?m)^report:\s*\n(?:[ \t]+.*\n)*?[ \t]+enabled:[ \t]*true\b`)
+
+// checkReportOnly: only the report service reads the report database (a
+// copy a few seconds behind); any other service with report.enabled is
+// about to decide something on stale data.
+func checkReportOnly(root, reportService string) []Finding {
+	var out []Finding
+	files, _ := filepath.Glob(filepath.Join(root, "conf", "*.yaml"))
+	for _, f := range files {
+		b, err := os.ReadFile(f)
+		if err != nil {
+			continue
+		}
+		if reportEnabled.Match(b) {
+			rel, _ := filepath.Rel(root, f)
+			out = append(out, Finding{rel, 0, "report-only", fmt.Sprintf("report.enabled is on: only %s reads the report database (StarRocks, a copy a few seconds behind); other services read MySQL through the service that owns the table, and ask %s for statistics", reportService, reportService)})
+		}
+	}
+	return out
 }
 
 // checkTests: a handler package with code but no test at all. One test that
