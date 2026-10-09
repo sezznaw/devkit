@@ -188,7 +188,9 @@ var baseMoneyWords = []string{"amount", "balance", "price", "fee", "total", "cre
 // never double and never Money.
 var baseRateWords = []string{"odds", "rate", "ratio", "percent", "pct", "multiplier"}
 
-var rateName = regexp.MustCompile(`(?i)(` + strings.Join(baseRateWords, "|") + `)`)
+// Field names are matched as snake-case words, not substrings: "duration_ms"
+// is not a ratio and "feedback" is not a fee.
+var rateName = regexp.MustCompile(`(?i)(^|_)(` + strings.Join(baseRateWords, "|") + `)(_|$)`)
 
 // isRateType: common.Decimal / Decimal, or a container of it.
 func isRateType(typ string) bool {
@@ -211,7 +213,7 @@ func isRateType(typ string) bool {
 func moneyPattern(extra []string) (goField, name *regexp.Regexp) {
 	words := append(append([]string{}, baseMoneyWords...), extra...)
 	alt := strings.Join(words, "|")
-	return regexp.MustCompile(`(?i)\b(` + alt + `)\w*\s+float(32|64)\b`), regexp.MustCompile(`(?i)(` + alt + `)`)
+	return regexp.MustCompile(`(?i)\b(` + alt + `)\w*\s+float(32|64)\b`), regexp.MustCompile(`(?i)(^|_)(` + alt + `)(_|$)`)
 }
 
 // countField: "total" and "count" style names are row counts, not money,

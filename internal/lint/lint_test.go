@@ -76,6 +76,8 @@ struct TransferReq {
     8: double odds
     9: string fee_rate
     10: common.Decimal fx_rate
+    11: i64 duration_ms
+    12: string feedback
 }
 struct Resp {
     1: i32 code
