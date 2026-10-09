@@ -185,6 +185,36 @@ func A() {
 	}
 }
 
+func TestLockRules(t *testing.T) {
+	dir := t.TempDir()
+	os.MkdirAll(filepath.Join(dir, "handler"), 0o755)
+	os.MkdirAll(filepath.Join(dir, "app"), 0o755)
+	os.WriteFile(filepath.Join(dir, "handler", "h.go"), []byte(`package handler
+type S struct {
+	mu sync.Mutex
+	ok sync.RWMutex //devkit:lint-ignore mutex
+}
+func A() {
+	ok, _ := rdb.SetNX(ctx, "lock:x", 1, time.Second).Result()
+	_ = redisx.WithLock(ctx, rdb, "x", time.Second, fn)
+}
+`), 0o644)
+	os.WriteFile(filepath.Join(dir, "app", "a.go"), []byte(`package app
+var mu sync.Mutex
+`), 0o644)
+	fs, err := checkGoFile(dir, "handler/h.go", goCheck{moneyGo: regexp.MustCompile(`$^`)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Count(joinRules(fs), "mutex") != 1 || strings.Count(joinRules(fs), "lock") != 1 {
+		t.Errorf("one mutex, one lock: %v", fs)
+	}
+	fs, _ = checkGoFile(dir, "app/a.go", goCheck{moneyGo: regexp.MustCompile(`$^`)})
+	if strings.Contains(joinRules(fs), "mutex") {
+		t.Errorf("a mutex in app/ is fine: %v", fs)
+	}
+}
+
 func TestBindRule(t *testing.T) {
 	dir := t.TempDir()
 	os.MkdirAll(filepath.Join(dir, "handler"), 0o755)

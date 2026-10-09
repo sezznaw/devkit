@@ -253,6 +253,13 @@ var directPublish = regexp.MustCompile(`\b(Kafka|events|Events|kafka|producer|Pr
 
 var runsTransaction = regexp.MustCompile(`\.Transaction\(|WithTx\(`)
 
+// handRolledLock is SetNX in service code: a lock written by hand misses
+// the token, the extension and the release; redisx.WithLock has them.
+var handRolledLock = regexp.MustCompile(`\.SetNX\(`)
+
+// localMutex in handler/ or repo/ code: it locks one replica only.
+var localMutex = regexp.MustCompile(`\bsync\.(RW)?Mutex\b`)
+
 // inProcessTimer is a timer that dies with the process: a business delay
 // ("cancel in 15 minutes") belongs in rt.Delay.Schedule, a repeat in a job.
 var inProcessTimer = regexp.MustCompile(`\btime\.(AfterFunc|NewTimer)\(`)
@@ -290,6 +297,12 @@ func checkGoFile(root, rel string, c goCheck) ([]Finding, error) {
 		}
 		if strings.Contains(code, "c.BindAndValidate(") && !ignored(line, "bind") {
 			out = append(out, Finding{rel, n, "bind", "use hertzx.Bind(c, &req) (returns false after answering {code:1001, msg:\"<field>: <rule>\"}) instead of c.BindAndValidate: every parameter error must look the same; the IDL's api.vd rules are checked by it"})
+		}
+		if handRolledLock.MatchString(code) && !ignored(line, "lock") {
+			out = append(out, Finding{rel, n, "lock", "a lock written by hand (SetNX) has no owner token, no extension and no safe release: use redisx.WithLock(ctx, rt.Redis, name, ttl, fn) (redisx.Wait(d) to wait a little)"})
+		}
+		if (strings.HasPrefix(rel, "handler"+string(filepath.Separator)) || strings.HasPrefix(rel, "repo"+string(filepath.Separator))) && localMutex.MatchString(code) && !ignored(line, "mutex") {
+			out = append(out, Finding{rel, n, "mutex", "a sync.Mutex locks this replica only; the service runs several, so exclusion across them is redisx.WithLock(ctx, rt.Redis, name, ttl, fn) (a mutex that only guards in-process state: //devkit:lint-ignore mutex)"})
 		}
 		if inProcessTimer.MatchString(code) && !ignored(line, "delay") {
 			out = append(out, Finding{rel, n, "delay", "a timer dies with the process: something to run at a time (cancel an unpaid order, close bets at kick-off) is rt.Delay.Schedule(ctx, tx, kind, key, at, payload) with rt.Delay.Handle(kind, fn) in app.Setup; repeating work is a job (--job)"})
