@@ -185,6 +185,23 @@ func A() {
 	}
 }
 
+func TestTestsRule(t *testing.T) {
+	dir := t.TempDir()
+	os.MkdirAll(filepath.Join(dir, "handler", "ser_api"), 0o755)
+	os.WriteFile(filepath.Join(dir, "handler", "ser_api", "h.go"), []byte("package ser_api\n"), 0o644)
+	if fs := checkTests(dir); len(fs) != 1 || fs[0].Rule != "tests" {
+		t.Fatalf("hertz handler package without a test: %v", fs)
+	}
+	os.WriteFile(filepath.Join(dir, "handler", "ser_api", "h_test.go"), []byte("package ser_api\n"), 0o644)
+	if fs := checkTests(dir); len(fs) != 0 {
+		t.Fatalf("with a test: %v", fs)
+	}
+	os.WriteFile(filepath.Join(dir, "handler", "handler.go"), []byte("package handler\n"), 0o644)
+	if fs := checkTests(dir); len(fs) != 1 || fs[0].File != "handler" {
+		t.Fatalf("kitex handler package without a test: %v", fs)
+	}
+}
+
 func TestLimitRule(t *testing.T) {
 	dir := t.TempDir()
 	f := filepath.Join(dir, "ser-api.thrift")

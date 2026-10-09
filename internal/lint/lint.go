@@ -82,6 +82,7 @@ func Run(o Options) ([]Finding, error) {
 		out = append(out, fs...)
 	}
 	out = append(out, checkFrameworkFiles(o.Root, m)...)
+	out = append(out, checkTests(o.Root)...)
 	if o.IDLDir != "" {
 		idl := filepath.Join(o.IDLDir, service, service+".thrift")
 		if _, err := os.Stat(idl); err == nil {
@@ -318,6 +319,35 @@ func checkGoFile(root, rel string, c goCheck) ([]Finding, error) {
 		}
 	}
 	return out, sc.Err()
+}
+
+// checkTests: a handler package with code but no test at all. One test that
+// builds the testx Runtime and calls the handler is the floor.
+func checkTests(root string) []Finding {
+	var out []Finding
+	dirs, _ := filepath.Glob(filepath.Join(root, "handler"))
+	sub, _ := filepath.Glob(filepath.Join(root, "handler", "*"))
+	for _, d := range sub {
+		if st, err := os.Stat(d); err == nil && st.IsDir() {
+			dirs = append(dirs, d)
+		}
+	}
+	for _, d := range dirs {
+		goFiles, _ := filepath.Glob(filepath.Join(d, "*.go"))
+		code, tests := 0, 0
+		for _, f := range goFiles {
+			if strings.HasSuffix(f, "_test.go") {
+				tests++
+			} else {
+				code++
+			}
+		}
+		if code > 0 && tests == 0 {
+			rel, _ := filepath.Rel(root, d)
+			out = append(out, Finding{rel, 0, "tests", "no test in this handler package: add one that builds testx.New(t, service, ...) and calls a handler (see idl/AGENTS.md 写测试); run it with make test"})
+		}
+	}
+	return out
 }
 
 // checkFrameworkFiles: a managed file that differs from what devkit wrote
