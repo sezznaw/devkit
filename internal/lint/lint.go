@@ -253,6 +253,10 @@ var directPublish = regexp.MustCompile(`\b(Kafka|events|Events|kafka|producer|Pr
 
 var runsTransaction = regexp.MustCompile(`\.Transaction\(|WithTx\(`)
 
+// inProcessTimer is a timer that dies with the process: a business delay
+// ("cancel in 15 minutes") belongs in rt.Delay.Schedule, a repeat in a job.
+var inProcessTimer = regexp.MustCompile(`\btime\.(AfterFunc|NewTimer)\(`)
+
 func checkGoFile(root, rel string, c goCheck) ([]Finding, error) {
 	whole, err := os.ReadFile(filepath.Join(root, rel))
 	if err != nil {
@@ -286,6 +290,9 @@ func checkGoFile(root, rel string, c goCheck) ([]Finding, error) {
 		}
 		if strings.Contains(code, "c.BindAndValidate(") && !ignored(line, "bind") {
 			out = append(out, Finding{rel, n, "bind", "use hertzx.Bind(c, &req) (returns false after answering {code:1001, msg:\"<field>: <rule>\"}) instead of c.BindAndValidate: every parameter error must look the same; the IDL's api.vd rules are checked by it"})
+		}
+		if inProcessTimer.MatchString(code) && !ignored(line, "delay") {
+			out = append(out, Finding{rel, n, "delay", "a timer dies with the process: something to run at a time (cancel an unpaid order, close bets at kick-off) is rt.Delay.Schedule(ctx, tx, kind, key, at, payload) with rt.Delay.Handle(kind, fn) in app.Setup; repeating work is a job (--job)"})
 		}
 		if inTx && directPublish.MatchString(code) && !ignored(line, "outbox") {
 			out = append(out, Finding{rel, n, "outbox", "this file runs a database transaction: an event that belongs with the change goes through rt.Kafka.PublishTx(ctx, tx, ...) inside it (the outbox), not Publish; keep Publish only for events without a transaction behind them"})

@@ -165,6 +165,26 @@ func (r *Repo) Notify() error { return r.events.Publish(ctx, "events.member", "1
 	}
 }
 
+func TestDelayRule(t *testing.T) {
+	dir := t.TempDir()
+	os.MkdirAll(filepath.Join(dir, "handler"), 0o755)
+	os.WriteFile(filepath.Join(dir, "handler", "h.go"), []byte(`package handler
+func A() {
+	time.AfterFunc(15*time.Minute, func() { cancel(orderNo) })
+	t := time.NewTimer(time.Second) //devkit:lint-ignore delay
+	_ = t
+	_, _ = s.rt.Delay.Schedule(ctx, tx, "order.cancel-unpaid", orderNo, time.Now().Add(15*time.Minute), p)
+}
+`), 0o644)
+	fs, err := checkGoFile(dir, "handler/h.go", goCheck{moneyGo: regexp.MustCompile(`$^`)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Count(joinRules(fs), "delay") != 1 {
+		t.Errorf("one AfterFunc (the ignored NewTimer and Schedule are fine): %v", fs)
+	}
+}
+
 func TestBindRule(t *testing.T) {
 	dir := t.TempDir()
 	os.MkdirAll(filepath.Join(dir, "handler"), 0o755)
