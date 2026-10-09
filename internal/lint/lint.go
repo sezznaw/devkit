@@ -176,6 +176,7 @@ var goPatterns = []pattern{
 	{regexp.MustCompile(`\bhttp\.Client\{|\bhttp\.Get\(|\bhttp\.Post\(|\bhttp\.PostForm\(|\bresty\.New\(`), "no-direct-middleware", "do not call HTTP APIs yourself: providers.<name> in conf and rt.Provider(name) (ser-vendor only)"},
 	{regexp.MustCompile(`\bs3\.NewFromConfig\(|\bs3\.New\(|\bminio\.New\(`), "no-direct-middleware", "do not create an S3 client: s3.enabled in conf and rt.S3"},
 	{regexp.MustCompile(`\bgocron\.|\bcron\.New\(|\btime\.NewTicker\(`), "no-direct-middleware", "do not schedule work yourself: a job in app/jobs.go (make jobs / make job NAME=...)"},
+	{regexp.MustCompile(`\bserver\.WithLimit\(|\bserver\.WithLimitReporter\(|\blimit\.Option\{`), "no-direct-middleware", "do not install a Kitex limiter yourself: the limits: section in conf (max_in_flight, max_qps, max_connections) refuses with code 5003 and counts rpc_server_rejected_total"},
 	{regexp.MustCompile(`\bfmt\.Print(ln|f)?\(|\blog\.(Print|Printf|Println|Fatal|Fatalf|Fatalln|Panic|Panicf)\(`), "use-zlog", "log through zlog (zlog.Ctx(ctx).Info(...)), which carries the trace_id; not fmt / log"},
 }
 
