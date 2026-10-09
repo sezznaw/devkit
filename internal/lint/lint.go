@@ -420,6 +420,10 @@ func checkIDL(path string, api bool, moneyName *regexp.Regexp) ([]Finding, error
 		if !strings.HasPrefix(prev, "//") && !strings.HasPrefix(prev, "/*") && !strings.HasSuffix(prev, "*/") && !ignored(line, "method-comment") {
 			out = append(out, Finding{rel, i + 1, "method-comment", fmt.Sprintf("%s has no comment: the first sentence is the endpoint's title in /docs", method)})
 		}
+		// a brute-force surface needs its own request-rate limit
+		if api && sensitiveMethod.MatchString(method+" "+ann) && !commentBlockHas(lines, i, limitTag) && !ignored(line, "limit") {
+			out = append(out, Finding{rel, i + 1, "limit", fmt.Sprintf("%s takes credentials or codes: add `// @limit <count>/m` above it (per client IP; the gateway's guard enforces it), for example `// @limit 30/m`", method)})
+		}
 		isGet := strings.Contains(ann, "api.get")
 		if readName.MatchString(method) || isGet || ignored(line, "request-id") {
 			continue
@@ -433,6 +437,27 @@ func checkIDL(path string, api bool, moneyName *regexp.Regexp) ([]Finding, error
 		}
 	}
 	return out, nil
+}
+
+// sensitiveMethod: a method name or path that takes credentials or
+// one-time codes, which someone will try to guess.
+var sensitiveMethod = regexp.MustCompile(`(?i)login|register|signup|password|passwd|otp|captcha|verifycode|sendcode|sms|resetpwd|forgot`)
+
+var limitTag = regexp.MustCompile(`@limit\s+\S+`)
+
+// commentBlockHas reports whether the comment lines right above line i
+// contain a match of re.
+func commentBlockHas(lines []string, i int, re *regexp.Regexp) bool {
+	for j := i - 1; j >= 0; j-- {
+		t := strings.TrimSpace(lines[j])
+		if t == "" || !(strings.HasPrefix(t, "//") || strings.HasPrefix(t, "*") || strings.HasPrefix(t, "/*")) {
+			return false
+		}
+		if re.MatchString(t) {
+			return true
+		}
+	}
+	return false
 }
 
 var bizCodeRE = regexp.MustCompile(`NewBizStatusError\(\s*(\d{3,5})\s*,|\bCode\w*\s*=\s*(\d{3,5})\b`)

@@ -185,6 +185,35 @@ func A() {
 	}
 }
 
+func TestLimitRule(t *testing.T) {
+	dir := t.TempDir()
+	f := filepath.Join(dir, "ser-api.thrift")
+	os.WriteFile(f, []byte(`struct AuthLoginReq { 1: string username }
+struct AuthRegisterReq { 1: string request_id }
+struct MemberGetProfileReq {}
+service S {
+    // 登录。
+    AuthLoginResp AuthLogin(1: AuthLoginReq req) (api.post="/v1/auth/login")
+    // 注册。
+    // @limit 10/m
+    AuthRegisterResp AuthRegister(1: AuthRegisterReq req) (api.post="/v1/auth/register")
+    // 资料。
+    MemberGetProfileResp MemberGetProfile(1: MemberGetProfileReq req) (api.post="/v1/member/getProfile")
+}
+`), 0o644)
+	fs, err := checkIDL(f, true, regexp.MustCompile(`$^`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Count(joinRules(fs), "limit") != 1 {
+		t.Errorf("login without @limit, register with, profile not sensitive: %v", fs)
+	}
+	fs, _ = checkIDL(f, false, regexp.MustCompile(`$^`))
+	if strings.Contains(joinRules(fs), "limit") {
+		t.Errorf("RPC IDLs have no routes to limit: %v", fs)
+	}
+}
+
 func TestLockRules(t *testing.T) {
 	dir := t.TempDir()
 	os.MkdirAll(filepath.Join(dir, "handler"), 0o755)
