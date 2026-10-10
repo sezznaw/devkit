@@ -33,7 +33,7 @@ func TestLockUnlock(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := []string{"Makefile", "cmd/svc/main.go", "cmd/svc/openapi.yaml", "idl.lock", "kitex_gen/a/a.go", "router/svc/svc.go"}
+	want := []string{".devkit/manifest.json", "Makefile", "cmd/svc/main.go", "cmd/svc/openapi.yaml", "idl.lock", "kitex_gen/a/a.go", "router/svc/svc.go"}
 	if len(files) != len(want) {
 		t.Fatalf("files = %v, want %v", files, want)
 	}

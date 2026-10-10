@@ -24,7 +24,9 @@ import (
 var genDirs = []string{"kitex_gen", "hertz_gen", ".idl"}
 
 // Generated single files.
-var genFiles = []string{"idl.lock", ".hz"}
+// Generated single files. .devkit/manifest.json is devkit's own record of
+// what it installed; a hand edit there blinds the framework-file lint rule.
+var genFiles = []string{"idl.lock", ".hz", ".devkit/manifest.json"}
 
 // Never looked into.
 var skipDirs = map[string]bool{".git": true, "bin": true, ".go": true, "node_modules": true, "vendor": true, ".devkit": true, ".idea": true, ".vscode": true}
