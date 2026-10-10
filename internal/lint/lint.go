@@ -404,7 +404,9 @@ func checkFrameworkFiles(root string, m *manifest.Manifest) []Finding {
 var (
 	structRE = regexp.MustCompile(`^\s*struct\s+(\w+)\s*\{`)
 	fieldRE  = regexp.MustCompile(`^\s*\d+\s*:\s*(?:optional\s+|required\s+)?([\w.<>, ]+?)\s+(\w+)`)
-	methodRE = regexp.MustCompile(`^\s*(\w+)\s+(\w+)\s*\(\s*\d+\s*:\s*(\w+)\s+\w+\s*\)\s*(\(.*\))?`)
+	// fieldFullRE also captures the field id and the optional/required keyword.
+	fieldFullRE = regexp.MustCompile(`^\s*(\d+)\s*:\s*(optional\s+|required\s+)?([\w.<>, ]+?)\s+(\w+)`)
+	methodRE    = regexp.MustCompile(`^\s*(\w+)\s+(\w+)\s*\(\s*\d+\s*:\s*(\w+)\s+\w+\s*\)\s*(\(.*\))?`)
 	// A method whose name carries a read verb (anywhere, as a camel-case
 	// word: MemberGetProfile, EgressCheck, ListOrders) changes nothing and
 	// needs no request_id. Token issuance counts as a read.
@@ -423,11 +425,15 @@ func checkIDL(path string, api bool, moneyName *regexp.Regexp) ([]Finding, error
 	var out []Finding
 	// First pass: struct fields.
 	fields := map[string]map[string]bool{} // struct -> field names
+	var shapes []respShape                 // every *Resp struct, in order
 	cur := ""
 	for i, line := range lines {
 		if m := structRE.FindStringSubmatch(line); m != nil {
 			cur = m[1]
 			fields[cur] = map[string]bool{}
+			if strings.HasSuffix(cur, "Resp") {
+				shapes = append(shapes, respShape{name: cur, line: i + 1})
+			}
 			continue
 		}
 		if strings.HasPrefix(strings.TrimSpace(line), "}") {
@@ -440,6 +446,11 @@ func checkIDL(path string, api bool, moneyName *regexp.Regexp) ([]Finding, error
 		if m := fieldRE.FindStringSubmatch(line); m != nil {
 			typ, name := strings.TrimSpace(m[1]), m[2]
 			fields[cur][name] = true
+			if strings.HasSuffix(cur, "Resp") && len(shapes) > 0 && shapes[len(shapes)-1].name == cur {
+				fm := fieldFullRE.FindStringSubmatch(line)
+				sh := &shapes[len(shapes)-1]
+				sh.fields = append(sh.fields, respField{id: fm[1], optional: strings.TrimSpace(fm[2]) == "optional", typ: typ, name: name, line: i + 1, ignored: ignored(line, "resp-shape") || ignored(line, "rpc-no-envelope")})
+			}
 			isRate := rateName.MatchString(name)
 			isMoney := moneyName.MatchString(name) && !countField(name) && !isRate
 			switch {
@@ -452,6 +463,7 @@ func checkIDL(path string, api bool, moneyName *regexp.Regexp) ([]Finding, error
 			}
 		}
 	}
+	out = append(out, checkRespShapes(rel, shapes, api)...)
 	// Second pass: methods.
 	inService := false
 	for i, line := range lines {

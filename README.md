@@ -191,7 +191,10 @@ against the team's conventions, whoever wrote the code. The generic rules
 are the same in every project: no middleware opened by hand (`rt.DB`,
 `rt.Redis`, `rt.Kafka`, `rt.S3`, `rt.Provider` instead), no float money
 (amount, balance, price, fee, ...), `request_id` on write methods, a comment
-on every IDL method, framework files untouched, the common library at the
+on every IDL method, one response envelope at the gateway (`resp-shape`:
+exactly `code`, `msg`, `optional <Struct> data`) and none inside RPC
+responses (`rpc-no-envelope`: failures are BizStatusErrors), framework files
+untouched, the common library at the
 team's version in go.mod (`common-version`) and the project's `kit-common/`
 checkout clean (`common-checkout`: go.work makes local builds use it), zlog
 for logging, `idl.lock` current. The project's own rules live in the IDL repository's `devkit.yaml`
