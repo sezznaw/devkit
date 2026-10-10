@@ -191,9 +191,11 @@ against the team's conventions, whoever wrote the code. The generic rules
 are the same in every project: no middleware opened by hand (`rt.DB`,
 `rt.Redis`, `rt.Kafka`, `rt.S3`, `rt.Provider` instead), no float money
 (amount, balance, price, fee, ...), `request_id` on write methods, a comment
-on every IDL method, one response envelope at the gateway (`resp-shape`:
-exactly `code`, `msg`, `optional <Struct> data`) and none inside RPC
-responses (`rpc-no-envelope`: failures are BizStatusErrors), framework files
+on every IDL method, no `code`/`msg` inside any response struct
+(`no-envelope`: a method returns its data struct; the gateway handler ends
+with `hertzx.OK` / `hertzx.Fail`, which add the `{code, msg, data}` envelope
+once, and RPC failures are BizStatusErrors) and no raw `c.JSON` in a gateway
+handler (`envelope-write`), framework files
 untouched, the common library at the
 team's version in go.mod (`common-version`) and the project's `kit-common/`
 checkout clean (`common-checkout`: go.work makes local builds use it), zlog

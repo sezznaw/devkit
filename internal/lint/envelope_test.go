@@ -30,57 +30,52 @@ func rules(fs []Finding, rule string) []Finding {
 	return out
 }
 
-func TestRespShape(t *testing.T) {
-	good := `struct Pong {
+func TestNoEnvelope(t *testing.T) {
+	good := `include "../common/common.thrift"
+struct Pong {
     1: string message
 }
-struct PingResp {
+struct Profile {
+    1: i64 uid
+}
+service S {
+    // ping
+    Pong Ping(1: PingReq req) (api.get="/ping")
+    // out
+    common.Empty Logout(1: LogoutReq req) (api.post="/v1/auth/logout")
+    // profile
+    Profile GetProfile(1: GetProfileReq req) (api.post="/v1/member/getProfile")
+}
+`
+	for _, api := range []bool{true, false} {
+		if fs := rules(lintIDL(t, api, good), "no-envelope"); len(fs) != 0 {
+			t.Fatalf("api=%v: good flagged: %v", api, fs)
+		}
+	}
+	bad := `struct PingResp {
     1: i32 code
     2: string msg
     3: optional Pong data
 }
-struct LogoutResp {
+struct Other {
     1: i32 code
-    2: string msg
+}
+struct Fine {
+    1: i32 code  //devkit:lint-ignore no-envelope
+}
+service S {
+    // ping
+    PingResp Ping(1: PingReq req) (api.get="/ping")
+    // other
+    Other Get(1: GetReq req) (api.post="/v1/x/get")
+    // fine
+    Fine Fine(1: FineReq req) (api.post="/v1/x/fine")
 }
 `
-	if fs := rules(lintIDL(t, true, good), "resp-shape"); len(fs) != 0 {
-		t.Fatalf("good shapes flagged: %v", fs)
-	}
-	bad := `struct TokenResp {
-    1: i32 code
-    2: string msg
-    3: optional string token
-}
-struct PlainResp {
-    1: string message
-}
-struct ListResp {
-    1: i32 code
-    2: string msg
-    3: optional list<Item> data
-}
-struct ReqResp {
-    1: i32 code
-    2: string msg
-    3: Item data
-}
-struct OkResp {
-    1: i32 code
-    2: string msg
-    3: optional Item data  //devkit:lint-ignore resp-shape
-}
-`
-	fs := rules(lintIDL(t, true, bad), "resp-shape")
-	if len(fs) != 4 {
-		t.Fatalf("want 4 findings, got %d: %v", len(fs), fs)
-	}
-	// RPC side: the same structs are fine except for code/msg.
-	rpc := rules(lintIDL(t, false, good), "rpc-no-envelope")
-	if len(rpc) != 4 { // PingResp code+msg, LogoutResp code+msg
-		t.Fatalf("rpc-no-envelope: want 4, got %d: %v", len(rpc), rpc)
-	}
-	if fs := rules(lintIDL(t, false, "struct GetResp {\n    1: Profile profile\n}\nstruct ListResp {\n    1: list<Profile> items\n    2: i64 total\n}\n"), "rpc-no-envelope"); len(fs) != 0 {
-		t.Fatalf("plain rpc flagged: %v", fs)
+	for _, api := range []bool{true, false} {
+		fs := rules(lintIDL(t, api, bad), "no-envelope")
+		if len(fs) != 3 { // PingResp.code, PingResp.msg, Other.code
+			t.Fatalf("api=%v: want 3, got %d: %v", api, len(fs), fs)
+		}
 	}
 }

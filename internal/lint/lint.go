@@ -79,7 +79,7 @@ func Run(o Options) ([]Finding, error) {
 		return nil, err
 	}
 	moneyGo, moneyName := moneyPattern(o.MoneyWords)
-	gc := goCheck{isVendor: service == o.VendorService, vendorRule: o.VendorService != "", moneyGo: moneyGo}
+	gc := goCheck{isVendor: service == o.VendorService, vendorRule: o.VendorService != "", isAPI: isAPIService(m), moneyGo: moneyGo}
 	for _, f := range goFiles {
 		fs, err := checkGoFile(o.Root, f, gc)
 		if err != nil {
@@ -256,6 +256,7 @@ func isMoneyType(typ string) bool {
 type goCheck struct {
 	isVendor   bool
 	vendorRule bool
+	isAPI      bool
 	moneyGo    *regexp.Regexp
 }
 
@@ -307,6 +308,9 @@ func checkGoFile(root, rel string, c goCheck) ([]Finding, error) {
 			if p.re.MatchString(code) && !ignored(line, p.rule) {
 				out = append(out, Finding{rel, n, p.rule, p.message})
 			}
+		}
+		if c.isAPI && strings.HasPrefix(rel, "handler/") && (strings.Contains(code, "c.JSON(") || strings.Contains(code, "c.String(") || strings.Contains(code, "c.AbortWithStatusJSON(")) && !ignored(line, "envelope-write") {
+			out = append(out, Finding{rel, n, "envelope-write", "answer with hertzx.OK(c, &data) / hertzx.Fail(ctx, c, err) / hertzx.FailCode(c, code, msg): they add the {code, msg, data} envelope once, so every endpoint looks the same (hz's generated c.JSON(consts.StatusOK, resp) is the stub to replace)"})
 		}
 		if strings.Contains(code, "c.BindAndValidate(") && !ignored(line, "bind") {
 			out = append(out, Finding{rel, n, "bind", "use hertzx.Bind(c, &req) (returns false after answering {code:1001, msg:\"<field>: <rule>\"}) instead of c.BindAndValidate: every parameter error must look the same; the IDL's api.vd rules are checked by it"})
@@ -431,9 +435,7 @@ func checkIDL(path string, api bool, moneyName *regexp.Regexp) ([]Finding, error
 		if m := structRE.FindStringSubmatch(line); m != nil {
 			cur = m[1]
 			fields[cur] = map[string]bool{}
-			if strings.HasSuffix(cur, "Resp") {
-				shapes = append(shapes, respShape{name: cur, line: i + 1})
-			}
+			shapes = append(shapes, respShape{name: cur, line: i + 1})
 			continue
 		}
 		if strings.HasPrefix(strings.TrimSpace(line), "}") {
@@ -446,10 +448,10 @@ func checkIDL(path string, api bool, moneyName *regexp.Regexp) ([]Finding, error
 		if m := fieldRE.FindStringSubmatch(line); m != nil {
 			typ, name := strings.TrimSpace(m[1]), m[2]
 			fields[cur][name] = true
-			if strings.HasSuffix(cur, "Resp") && len(shapes) > 0 && shapes[len(shapes)-1].name == cur {
+			if len(shapes) > 0 && shapes[len(shapes)-1].name == cur {
 				fm := fieldFullRE.FindStringSubmatch(line)
 				sh := &shapes[len(shapes)-1]
-				sh.fields = append(sh.fields, respField{id: fm[1], optional: strings.TrimSpace(fm[2]) == "optional", typ: typ, name: name, line: i + 1, ignored: ignored(line, "resp-shape") || ignored(line, "rpc-no-envelope")})
+				sh.fields = append(sh.fields, respField{id: fm[1], optional: strings.TrimSpace(fm[2]) == "optional", typ: typ, name: name, line: i + 1, ignored: ignored(line, "no-envelope")})
 			}
 			isRate := rateName.MatchString(name)
 			isMoney := moneyName.MatchString(name) && !countField(name) && !isRate
@@ -463,8 +465,8 @@ func checkIDL(path string, api bool, moneyName *regexp.Regexp) ([]Finding, error
 			}
 		}
 	}
-	out = append(out, checkRespShapes(rel, shapes, api)...)
 	// Second pass: methods.
+	returns := map[string]bool{} // struct names a method returns
 	inService := false
 	for i, line := range lines {
 		t := strings.TrimSpace(line)
@@ -484,6 +486,8 @@ func checkIDL(path string, api bool, moneyName *regexp.Regexp) ([]Finding, error
 			continue
 		}
 		method, req, ann := m[2], m[3], m[4]
+		returns[strings.TrimPrefix(m[1], "common.")] = true
+		returns[m[1]] = true
 		prev := ""
 		for j := i - 1; j >= 0; j-- {
 			if strings.TrimSpace(lines[j]) == "" {
@@ -511,6 +515,13 @@ func checkIDL(path string, api bool, moneyName *regexp.Regexp) ([]Finding, error
 			out = append(out, Finding{rel, i + 1, "request-id", fmt.Sprintf("%s %s looks like a write (name does not read like a query) but %s has no request_id field; add `1: string request_id` so the framework makes it idempotent, or mark the line `// devkit:lint-ignore request-id` if it truly changes nothing", what, method, req)})
 		}
 	}
+	var responses []respShape
+	for _, sh := range shapes {
+		if returns[sh.name] || strings.HasSuffix(sh.name, "Resp") {
+			responses = append(responses, sh)
+		}
+	}
+	out = append(out, checkRespShapes(rel, responses, api)...)
 	return out, nil
 }
 

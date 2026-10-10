@@ -80,7 +80,7 @@ struct TransferReq {
     12: string feedback
 }
 struct Resp {
-    1: i32 code
+    1: string result
 }
 service S {
     // 取资料。
