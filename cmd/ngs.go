@@ -314,6 +314,7 @@ func runNew(ctx context.Context, kind serviceKind, name string) error {
 		if err := workspace.InitRepo(ctx, svcDir, "chore: scaffold "+name+" with devkit "+kind.command); err != nil {
 			s.Log("warning: %v", err)
 		}
+		installHooksQuietly(svcDir, s.Logf)
 		// The new service joins go.work so the IDE resolves the common library
 		// to kit-common/ for it as well.
 		syncProject(ctx, cfg, wsDir, teamValues{GoVersion: team.GoVersion}, true, s.Logf)
