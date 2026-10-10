@@ -8,6 +8,7 @@ import (
 
 	"github.com/sezznaw/devkit/internal/lock"
 	"github.com/sezznaw/devkit/internal/ui"
+	"github.com/sezznaw/devkit/internal/workspace"
 )
 
 var lockFlags struct {
@@ -72,6 +73,22 @@ service or in the project directory for every service.
 				}
 			}
 		}
+		// The project's kit-common/ checkout: go.work makes every local build
+		// use it, so an edit there is a framework change nobody else has.
+		if ws := workspace.Find("."); ws != "" && !lockFlags.list {
+			var n int
+			if lockFlags.unlock {
+				n, err = lock.UnlockCommon(ws)
+			} else {
+				n, err = lock.LockCommon(ws)
+			}
+			if err != nil {
+				fmt.Printf("%s kit-common/: %v\n", ui.Stdout.Failure("✗"), err)
+				failed++
+			} else if n > 0 && !lockFlags.quiet {
+				fmt.Printf("%s kit-common/: %d file(s) %s\n", ui.Stdout.Success("✓"), n, map[bool]string{true: "writable again", false: "made read-only (the shared library's checkout; change it in its own repository)"}[lockFlags.unlock])
+			}
+		}
 		if failed > 0 {
 			return fmt.Errorf("%d service(s) not done", failed)
 		}
@@ -84,6 +101,20 @@ func init() {
 	lockCmd.Flags().BoolVarP(&lockFlags.quiet, "quiet", "q", false, "print nothing unless something fails")
 	lockCmd.Flags().BoolVar(&lockFlags.list, "list", false, "list the files instead of changing them")
 	rootCmd.AddCommand(lockCmd)
+}
+
+// lockCommonQuietly locks the project's kit-common/ checkout after it was synced.
+func lockCommonQuietly(projectDir string, logf func(string, ...any)) {
+	if projectDir == "" {
+		return
+	}
+	n, err := lock.LockCommon(projectDir)
+	switch {
+	case err != nil:
+		logf("kit-common/ not made read-only: %v", err)
+	case n > 0:
+		logf("kit-common/ (%d files) made read-only: the shared library is changed in its own repository, not here", n)
+	}
 }
 
 // lockQuietly is what ngs and update do when they finish: the files they

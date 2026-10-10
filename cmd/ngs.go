@@ -319,6 +319,7 @@ func runNew(ctx context.Context, kind serviceKind, name string) error {
 		// The new service joins go.work so the IDE resolves the common library
 		// to kit-common/ for it as well.
 		syncProject(ctx, cfg, wsDir, teamValues{GoVersion: team.GoVersion}, true, s.Logf)
+		lockCommonQuietly(wsDir, s.Logf)
 		return nil
 	}); err != nil {
 		return fail(err)

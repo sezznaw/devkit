@@ -163,3 +163,53 @@ func contains(list []string, s string) bool {
 	}
 	return false
 }
+
+// CommonDir is the project's checkout of the common library (<project>/kit-common).
+const CommonDir = "kit-common"
+
+// LockCommon makes every file of the project's kit-common/ checkout
+// read-only (git still updates it: it replaces files rather than writing
+// into them). It returns how many files changed mode; 0 when there is no
+// checkout.
+func LockCommon(projectDir string) (int, error) {
+	return applyDir(filepath.Join(projectDir, CommonDir), func(m os.FileMode) os.FileMode { return m &^ 0o222 })
+}
+
+// UnlockCommon gives the owner write permission back on the checkout.
+func UnlockCommon(projectDir string) (int, error) {
+	return applyDir(filepath.Join(projectDir, CommonDir), func(m os.FileMode) os.FileMode { return m | 0o200 })
+}
+
+func applyDir(dir string, f func(os.FileMode) os.FileMode) (int, error) {
+	if st, err := os.Stat(dir); err != nil || !st.IsDir() {
+		return 0, nil
+	}
+	n := 0
+	err := filepath.WalkDir(dir, func(p string, e fs.DirEntry, err error) error {
+		if err != nil {
+			return nil
+		}
+		if e.IsDir() {
+			if e.Name() == ".git" {
+				return filepath.SkipDir
+			}
+			return nil
+		}
+		if !e.Type().IsRegular() {
+			return nil
+		}
+		st, err := os.Lstat(p)
+		if err != nil {
+			return nil
+		}
+		mode := st.Mode().Perm()
+		if want := f(mode); want != mode {
+			if err := os.Chmod(p, want); err != nil {
+				return err
+			}
+			n++
+		}
+		return nil
+	})
+	return n, err
+}

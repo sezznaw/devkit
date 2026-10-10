@@ -191,8 +191,10 @@ against the team's conventions, whoever wrote the code. The generic rules
 are the same in every project: no middleware opened by hand (`rt.DB`,
 `rt.Redis`, `rt.Kafka`, `rt.S3`, `rt.Provider` instead), no float money
 (amount, balance, price, fee, ...), `request_id` on write methods, a comment
-on every IDL method, framework files untouched, zlog for logging, `idl.lock`
-current. The project's own rules live in the IDL repository's `devkit.yaml`
+on every IDL method, framework files untouched, the common library at the
+team's version in go.mod (`common-version`) and the project's `kit-common/`
+checkout clean (`common-checkout`: go.work makes local builds use it), zlog
+for logging, `idl.lock` current. The project's own rules live in the IDL repository's `devkit.yaml`
 (so the laptop and CI read one file): `lint.vendor_service` (third-party
 calls only there), `lint.money_words` (extra money field names),
 `lint.errors_file` (business codes must be registered there),
@@ -361,8 +363,10 @@ code (`app/`, `handler/`, `repo/`, `conf/*.yaml`, `deps/`, `go.mod`) stays
 writable. `ngs`, `update` and `make gen` lock when they finish; `make gen`
 unlocks first so the generators can overwrite. It is a reminder, not a wall:
 `devkit lint`'s framework-file rule, the pre-push hook and CI still decide.
-`devkit lock --unlock` makes everything writable again, `--list` prints the
-set. Git does not store the bit, so a fresh clone is locked by its first
+The project's `kit-common/` checkout is locked too: it is the library every
+local build compiles against (go.work), so a change there belongs in the
+library's own repository. `devkit lock --unlock` makes everything writable
+again, `--list` prints the set. Git does not store the bit, so a fresh clone is locked by its first
 `make gen`.
 
 ## Troubleshooting

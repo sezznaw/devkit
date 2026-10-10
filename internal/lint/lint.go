@@ -52,6 +52,9 @@ type Options struct {
 	ErrorsFile string
 	// Disable lists rule names to skip.
 	Disable []string
+	// ProjectDir is the project directory holding the kit-common/ checkout;
+	// "" skips the common-checkout rule (set it for one service of a run).
+	ProjectDir string
 }
 
 // Ignore marks a line a rule must skip: `//devkit:lint-ignore <rule>` (Go)
@@ -85,6 +88,8 @@ func Run(o Options) ([]Finding, error) {
 		out = append(out, fs...)
 	}
 	out = append(out, checkFrameworkFiles(o.Root, m)...)
+	out = append(out, checkCommonVersion(o.Root, m)...)
+	out = append(out, checkCommonCheckout(o.ProjectDir)...)
 	out = append(out, checkTests(o.Root)...)
 	if o.ReportService != "" && service != o.ReportService {
 		out = append(out, checkReportOnly(o.Root, o.ReportService)...)

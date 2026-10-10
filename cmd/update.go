@@ -107,6 +107,7 @@ Files you own (go.mod, idl.mk, conf/, handler/) are never touched.`,
 		}
 		// Whatever the scope, the project's kit-common/ and go.work follow the team.
 		syncAfterUpdate(cmd, roots, single)
+		lockCommonQuietly(projectOf(roots, single), func(format string, args ...any) { fmt.Printf("   "+format+"\n", args...) })
 		for _, root := range roots {
 			logf := func(format string, args ...any) { fmt.Printf("   "+format+"\n", args...) }
 			installHooksQuietly(root, logf)

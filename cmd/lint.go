@@ -65,8 +65,12 @@ Exit status 1 when there are findings, so CI stops.`,
 			rules = r
 		}
 		total := 0
-		for _, root := range roots {
-			findings, err := lint.Run(lint.Options{Root: root, IDLDir: idlDir,
+		for i, root := range roots {
+			pd := ""
+			if i == 0 {
+				pd = projectDir // the kit-common/ checkout is checked once per run
+			}
+			findings, err := lint.Run(lint.Options{Root: root, IDLDir: idlDir, ProjectDir: pd,
 				VendorService: rules.Lint.VendorService, ReportService: rules.Lint.ReportService, MoneyWords: rules.Lint.MoneyWords, ErrorsFile: rules.Lint.ErrorsFile, Disable: rules.Lint.Disable})
 			if err != nil {
 				return err
