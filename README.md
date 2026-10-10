@@ -262,6 +262,7 @@ echo 'source "$HOME/.devkit/env"' >> ~/.zshrc    # or ~/.bashrc
 | `devkit self-update` | upgrade devkit itself. `--check` only reports |
 | `devkit lint` | check the service against the team's rules (what `make lint` runs); see above |
 | `devkit hooks` | install the git pre-push hook that runs `make lint && make test` before every push (what CI's test stage runs; `--remove` to drop it, `git push --no-verify` to skip once). `ngs` and `update` install it too |
+| `devkit lock` | make the framework's files and generated code read-only, so the editor says so (`ngs`, `update` and `make gen` do it; `--unlock` undoes it, `--list` shows the files). A reminder: lint, the hook and CI still decide |
 | `devkit doctor` | show the state of git, Go, kitex, thriftgo and hz against the team's versions. `--fix` installs what is missing and replaces a generator of another version |
 | `devkit version` | version info for bug reports |
 
@@ -348,6 +349,21 @@ and never touched again. For the managed files:
 | edited by you | left alone; new version written next to it as `<file>.new` | replaced, your version kept as `<file>.bak` |
 | deleted by you | restored | same |
 | no longer part of the template | deleted if unchanged, kept if edited | edited one kept as `.bak` |
+
+### Files you cannot edit by accident
+
+Open the Makefile, `cmd/<service>/main.go`, anything under `kitex_gen/` or
+`hertz_gen/`, hz's `router/*.go`, the OpenAPI document or `idl.lock` in an
+editor and it says **read-only**, exactly like a library in the Go module
+cache. That is `devkit lock`: the files devkit wrote (and replaces on
+`update`) plus everything a generator writes lose their write bit. Your own
+code (`app/`, `handler/`, `repo/`, `conf/*.yaml`, `deps/`, `go.mod`) stays
+writable. `ngs`, `update` and `make gen` lock when they finish; `make gen`
+unlocks first so the generators can overwrite. It is a reminder, not a wall:
+`devkit lint`'s framework-file rule, the pre-push hook and CI still decide.
+`devkit lock --unlock` makes everything writable again, `--list` prints the
+set. Git does not store the bit, so a fresh clone is locked by its first
+`make gen`.
 
 ## Troubleshooting
 

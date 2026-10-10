@@ -13,6 +13,7 @@ import (
 
 	"github.com/sezznaw/devkit/internal/config"
 	"github.com/sezznaw/devkit/internal/installer"
+	"github.com/sezznaw/devkit/internal/lock"
 	"github.com/sezznaw/devkit/internal/manifest"
 	"github.com/sezznaw/devkit/internal/project"
 	"github.com/sezznaw/devkit/internal/registry"
@@ -76,6 +77,11 @@ Files you own (go.mod, idl.mk, conf/, handler/) are never touched.`,
 			if !single {
 				fmt.Println(ui.Stdout.Heading("== " + name))
 			}
+			// The framework's files are read-only in the editor (devkit lock);
+			// make them writable before they are rewritten, lock again at the end.
+			if _, err := lock.Unlock(root); err != nil {
+				fmt.Printf("   %s %v\n", ui.Stdout.Failure("error:"), err)
+			}
 			in, err := newInstallerAt(root, updateFlags.force, updateFlags.skipHooks)
 			if err == nil {
 				var changed bool
@@ -102,7 +108,9 @@ Files you own (go.mod, idl.mk, conf/, handler/) are never touched.`,
 		// Whatever the scope, the project's kit-common/ and go.work follow the team.
 		syncAfterUpdate(cmd, roots, single)
 		for _, root := range roots {
-			installHooksQuietly(root, func(format string, args ...any) { fmt.Printf("   "+format+"\n", args...) })
+			logf := func(format string, args ...any) { fmt.Printf("   "+format+"\n", args...) }
+			installHooksQuietly(root, logf)
+			lockQuietly(root, logf)
 		}
 		if single {
 			printNotes(notes)

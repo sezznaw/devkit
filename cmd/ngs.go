@@ -315,6 +315,7 @@ func runNew(ctx context.Context, kind serviceKind, name string) error {
 			s.Log("warning: %v", err)
 		}
 		installHooksQuietly(svcDir, s.Logf)
+		lockQuietly(svcDir, s.Logf)
 		// The new service joins go.work so the IDE resolves the common library
 		// to kit-common/ for it as well.
 		syncProject(ctx, cfg, wsDir, teamValues{GoVersion: team.GoVersion}, true, s.Logf)
