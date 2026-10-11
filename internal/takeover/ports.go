@@ -83,7 +83,11 @@ func Plan(env *Env, taken func(port int) bool) (*Layout, error) {
 		l.addInfra(ep, grpc, main+nacosGRPCOffset)
 		l.NacosAddr = fmt.Sprintf("127.0.0.1:%d", main)
 	}
-	for _, ep := range env.Infra {
+	// Services with a ClusterIP get the rule's port first; a headless twin
+	// on the same port (StarRocks' -search next to -service) moves up.
+	infra := append([]Endpoint(nil), env.Infra...)
+	sort.SliceStable(infra, func(i, j int) bool { return infra[i].ClusterIP != "" && infra[j].ClusterIP == "" })
+	for _, ep := range infra {
 		for _, p := range ep.Ports {
 			if hasPort(ep.Ports, nacosPort) && (p == nacosPort || p == nacosPort+nacosGRPCOffset) {
 				continue
