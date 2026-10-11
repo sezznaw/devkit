@@ -1,7 +1,7 @@
 // Package hosts keeps the GitLab servers a developer saved a token for (devkit
 // auth) and the projects pulled from them (devkit pull), in
 // ~/.devkit/hosts.yaml (mode 600). The token is also written to ~/.netrc,
-// which git (clone, push) and go (private modules) read, so one login
+// which git (clone, push) and go (private modules) read, so one token
 // serves all three.
 package hosts
 

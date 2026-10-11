@@ -23,7 +23,7 @@ var authCmd = &cobra.Command{
 	Long: `auth stores a personal access token for one GitLab server. It is asked for
 interactively (never on the command line) and kept in ~/.devkit/hosts.yaml
 (mode 600); the same token is written to ~/.netrc, which git (clone, push over
-HTTPS) and go (private modules, GOPRIVATE) read, so one login serves all
+HTTPS) and go (private modules, GOPRIVATE) read, so one token serves all
 three. The token needs the scopes api, read_repository, write_repository.
 
   devkit auth https://gitlab.example.com
@@ -94,6 +94,6 @@ func addGoPrivate(hostname string) string {
 }
 
 func init() {
-	loginCmd.Flags().BoolVar(&authFlags.tokenStdin, "token-stdin", false, "read the token from stdin instead of asking")
+	authCmd.Flags().BoolVar(&authFlags.tokenStdin, "token-stdin", false, "read the token from stdin instead of asking")
 	rootCmd.AddCommand(authCmd)
 }
