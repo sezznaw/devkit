@@ -14,6 +14,9 @@ import (
 // that name is the project's to use.
 const CommonDir = "kit-common"
 
+// LibDir is the project's own shared Go module, <project>/lib, when it has one.
+const LibDir = "lib"
+
 // legacyCommonDir is where the checkout was until devkit 0.2.1.
 const legacyCommonDir = "common"
 
@@ -162,6 +165,11 @@ func SyncGoWork(project, goVersion string, services []string) (changed bool, err
 			use = append(use, "./"+filepath.Base(s))
 		}
 	}
+	// The project's own shared library (pure Go functions every service may
+	// use), when the project has one: edits are picked up without a release.
+	if _, err := os.Stat(filepath.Join(project, LibDir, "go.mod")); err == nil {
+		use = append(use, "./"+LibDir)
+	}
 	// The project's own common/. Not when it is a second copy of the shared
 	// library (a checkout from before the rename, next to kit-common/): one
 	// module twice in a workspace stops every go command.
@@ -175,8 +183,8 @@ func SyncGoWork(project, goVersion string, services []string) (changed bool, err
 	var b strings.Builder
 	b.WriteString(goWorkMarker + "\n")
 	b.WriteString("//\n// It makes \"go to definition\" open the project's own " + CommonDir + "/ directory, which\n")
-	b.WriteString("// devkit keeps at the team's released version, and the project's own common/\n")
-	b.WriteString("// when that is a Go module. It exists only on this machine;\n")
+	b.WriteString("// devkit keeps at the team's released version, and the project's own lib/\n")
+	b.WriteString("// (shared pure functions) when it has one. It exists only on this machine;\n")
 	b.WriteString("// CI and Docker builds use the versions in each service's go.mod.\n")
 	b.WriteString("// GOWORK=off makes a command ignore it.\n\n")
 	b.WriteString("go " + goVersion + "\n\nuse (\n")
