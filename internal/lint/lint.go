@@ -47,6 +47,11 @@ type Options struct {
 	// MoneyWords extend the built-in list of field names that must not be
 	// floats (a betting project adds odds, stake, payout).
 	MoneyWords []string
+	// ErrorsDir is the directory of error-code Thrift files, relative to
+	// IDLDir (rules error-code, error-dup, error-range, error-comment);
+	// ErrorRanges maps a file name to its allowed ranges ("1000-1999,5000-5999").
+	ErrorsDir   string
+	ErrorRanges map[string]string
 	// ErrorsFile is the business-code table, relative to IDLDir; "" switches
 	// the error-code rule off.
 	ErrorsFile string
@@ -112,7 +117,9 @@ func Run(o Options) ([]Finding, error) {
 			}
 			out = append(out, fs...)
 		}
-		if o.ErrorsFile != "" {
+		if o.ErrorsDir != "" {
+			out = append(out, checkErrorDir(o.Root, goFiles, filepath.Join(o.IDLDir, o.ErrorsDir), o.ErrorRanges)...)
+		} else if o.ErrorsFile != "" {
 			out = append(out, checkErrorCodes(o.Root, goFiles, filepath.Join(o.IDLDir, o.ErrorsFile))...)
 		}
 		out = append(out, checkIDLLock(o.Root, o.IDLDir, service)...)

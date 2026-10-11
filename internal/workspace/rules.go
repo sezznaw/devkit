@@ -33,9 +33,17 @@ type LintRules struct {
 	// MoneyWords are added to the built-in list (amount, balance, price, fee,
 	// total, credit, debit, money) for rule no-float-money.
 	MoneyWords []string `yaml:"money_words"`
-	// ErrorsFile is the business-code table, relative to the IDL directory
-	// (rule error-code). Empty: the rule is off.
+	// ErrorsFile is the business-code table (a Markdown table), relative to
+	// the IDL directory (rule error-code). Superseded by ErrorsDir.
 	ErrorsFile string `yaml:"errors_file"`
+	// ErrorsDir is the directory of error-code Thrift files, relative to the
+	// IDL directory: one file per domain, `const i32 Name = code` with a
+	// comment line above (rules error-code, error-dup, error-range,
+	// error-comment). Empty: the rules are off.
+	ErrorsDir string `yaml:"errors_dir"`
+	// ErrorRanges maps an errors file (without .thrift) to the code ranges
+	// it may declare, "lo-hi" joined by commas (rule error-range).
+	ErrorRanges map[string]string `yaml:"error_ranges"`
 	// HandlerMethods is how many RPC methods one file under handler/ may
 	// hold before rule handler-split asks for a split by topic (default 8).
 	HandlerMethods int `yaml:"handler_methods"`

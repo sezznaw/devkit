@@ -23,7 +23,8 @@ for logging, idl.lock current. Project rules, from <idl>/devkit.yaml:
   lint:
     vendor_service: ser-vendor      # third-party calls only here (unset: rule off)
     money_words: [odds, stake]      # added to amount, balance, price, fee, ... (never floats)
-    errors_file: errors.md          # business codes must be registered here (unset: rule off)
+    errors_dir: errors              # error-code Thrift files, one per domain (unset: rule off)
+    error_ranges: {member: 2000-2999} # the codes each file may declare
     disable: []                     # rules this project does not want
 
 Run it inside a service (make lint does), or in the project directory for
@@ -71,7 +72,7 @@ Exit status 1 when there are findings, so CI stops.`,
 				pd = projectDir // the kit-common/ checkout is checked once per run
 			}
 			findings, err := lint.Run(lint.Options{Root: root, IDLDir: idlDir, ProjectDir: pd,
-				VendorService: rules.Lint.VendorService, ReportService: rules.Lint.ReportService, MoneyWords: rules.Lint.MoneyWords, ErrorsFile: rules.Lint.ErrorsFile, HandlerMethods: rules.Lint.HandlerMethods, Disable: rules.Lint.Disable})
+				VendorService: rules.Lint.VendorService, ReportService: rules.Lint.ReportService, MoneyWords: rules.Lint.MoneyWords, ErrorsFile: rules.Lint.ErrorsFile, ErrorsDir: rules.Lint.ErrorsDir, ErrorRanges: rules.Lint.ErrorRanges, HandlerMethods: rules.Lint.HandlerMethods, Disable: rules.Lint.Disable})
 			if err != nil {
 				return err
 			}

@@ -206,7 +206,10 @@ checkout clean (`common-checkout`: go.work makes local builds use it), zlog
 for logging, `idl.lock` current. The project's own rules live in the IDL repository's `devkit.yaml`
 (so the laptop and CI read one file): `lint.vendor_service` (third-party
 calls only there), `lint.money_words` (extra money field names),
-`lint.errors_file` (business codes must be registered there),
+`lint.errors_dir` + `lint.error_ranges` (business codes are declared once, in
+Thrift files per domain, with a comment each, inside their domain's range,
+and used as the generated `errcode` constants: `error-code`, `error-dup`,
+`error-range`, `error-comment`),
 `lint.disable`.
 Every finding says what to do instead; exit status 1 stops CI. A line opts
 out of one rule with `//devkit:lint-ignore <rule>`. `idl-lock` closes the
