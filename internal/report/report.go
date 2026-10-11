@@ -7,6 +7,7 @@ package report
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -105,6 +106,7 @@ func Collect(dir string, opt Options) (*Report, error) {
 	if opt.Since == "" {
 		opt.Since = "24h"
 	}
+	sinceIsRef := !reDuration.MatchString(opt.Since) && !reDate.MatchString(opt.Since)
 	entries, err := os.ReadDir(dir)
 	if err != nil {
 		return nil, err
@@ -154,11 +156,15 @@ func Collect(dir string, opt Options) (*Report, error) {
 		wg.Wait()
 	}
 	var changed []*Repo
+	refKnown := false
 	for _, rp := range repos {
 		if err := inspect(rp, r.Author, opt); err != nil {
-			r.Warnings = append(r.Warnings, fmt.Sprintf("%s: %v", rp.Name, err))
+			if !errors.Is(err, errNoSuchRef) {
+				r.Warnings = append(r.Warnings, fmt.Sprintf("%s: %v", rp.Name, err))
+			}
 			continue
 		}
+		refKnown = true
 		if len(rp.Commits) == 0 && len(rp.Files) == 0 {
 			continue
 		}
@@ -174,6 +180,9 @@ func Collect(dir string, opt Options) (*Report, error) {
 		}
 	}
 	r.Repos = changed
+	if sinceIsRef && !refKnown {
+		return nil, fmt.Errorf("--since %q is neither a duration (30m, 24h, 3d, 1w), a date (2026-10-11) nor a commit/tag/branch any repository here knows", opt.Since)
+	}
 	for _, rp := range changed {
 		if rp.Kind == "idl" {
 			r.IDL = idlChanges(rp)
@@ -233,7 +242,10 @@ func kindOf(p string) string {
 	return "other"
 }
 
-var reDuration = regexp.MustCompile(`^(\d+)([hdw])$`)
+// errNoSuchRef: --since named a ref this repository does not have.
+var errNoSuchRef = errors.New("no such ref")
+
+var reDuration = regexp.MustCompile(`^(\d+)([mhdw])$`)
 var reDate = regexp.MustCompile(`^\d{4}-\d{2}-\d{2}`)
 
 // inspect fills one repository's commits and files for the range.
@@ -247,7 +259,7 @@ func inspect(rp *Repo, author string, opt Options) error {
 	case reDuration.MatchString(opt.Since):
 		m := reDuration.FindStringSubmatch(opt.Since)
 		n, _ := strconv.Atoi(m[1])
-		unit := map[string]string{"h": "hours", "d": "days", "w": "weeks"}[m[2]]
+		unit := map[string]string{"m": "minutes", "h": "hours", "d": "days", "w": "weeks"}[m[2]]
 		logArgs = []string{"--since=" + fmt.Sprintf("%d %s ago", n, unit)}
 	case reDate.MatchString(opt.Since):
 		logArgs = []string{"--since=" + opt.Since}
@@ -256,7 +268,7 @@ func inspect(rp *Repo, author string, opt Options) error {
 		if err != nil {
 			// A ref that exists only in some repositories (a tag, a branch):
 			// elsewhere it means "nothing".
-			return nil
+			return errNoSuchRef
 		}
 		base = ref
 		logArgs = []string{base + "..HEAD"}

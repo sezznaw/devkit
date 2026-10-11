@@ -25,7 +25,7 @@ cd idl && git add -A && git commit -m "feat(api): member/updateAvatar" && git pu
 
 ## 3. 生成：`cd ../<网关> && make gen`
 
-hz 在 `handler/<领域>/<领域>_service.go` 补一个空函数，`cmd/<网关>/openapi.yaml` 同时更新。空函数用了 `c.BindAndValidate` 和 `consts.StatusOK` 而文件没 import `consts`，所以**第 4 步改完之前编译报 `undefined: consts` 是正常的**，不要去加 import，直接换掉整个函数体。
+hz 在 `handler/<领域>/<领域>_service.go` 补一个空函数，`cmd/<网关>/openapi.yaml` 同时更新。空函数用了 `c.BindAndValidate` 和 `c.JSON(consts.StatusOK, resp)`，两样都不合规矩（lint bind / envelope-write）；有时还缺 `consts` 的 import 而编译报 `undefined: consts`，这是正常的，不要去修它，直接按第 4 步换掉整个函数体。
 
 ## 4. 填函数体（照抄本项目已有的网关 handler，AGENTS.md 指出样板）
 

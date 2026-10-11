@@ -32,7 +32,7 @@ cd idl && git add -A && git commit -m "feat(member): UpdateAvatar" && git push &
 - kitex 不生成空函数：忘了实现，编译报 `missing method Xxx`，照着报错补。
 - 数据访问写在 `repo/`：一张表一个文件，方法挂在 `*Repo` 上，每条查询带 `ctx`。
 - 业务错误：`return nil, errcode.Err(errcode.BadCredentials)`（消息就是 errors 文件里那行注释）；要补细节 `errcode.Errf(errcode.MemberNotFound, "uid 7")`。**不要手写消息字符串**（lint 规则 error-msg），不要写数字码。
-- 分页：`page, size, offset := pagex.Normalize(req.Page)`。
+- 分页：`page, size, offset := pagex.Normalize(req.Page)`（调用方没传 page 块时 `req.Page` 是 nil，Normalize 按第 1 页、默认条数处理）。
 - 需要锁、缓存、延时任务、事件：用 `rt.X`（AGENTS.md「框架替你做了什么」的表），不要自己造。
 
 ## 5. 测试：`handler/<主题>_test.go`
@@ -45,7 +45,7 @@ make test && go vet ./...
 
 ## 6. 部署后检查
 
-新方法是**读**操作：`app/verify.go` 加或扩一条检查调它（参数无害，查不到返回 nil）。写操作一般不加，汇报里说明。细则见 `devkit-finish`。
+新方法是**读**操作：扩 `app/verify.go` 里现有的一条检查多调一下它（参数无害，查不到返回 nil）；没有合适的再新开一条。写操作一般不加，汇报里说明。细则见 `devkit-finish`。
 
 ## 7. 收尾
 

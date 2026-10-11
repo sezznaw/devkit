@@ -73,7 +73,7 @@ func mustGetwd() string {
 }
 
 func init() {
-	reportCmd.Flags().StringVar(&reportFlags.since, "since", "24h", "range: a duration (24h, 3d, 1w), a date (2026-10-11) or a git ref")
+	reportCmd.Flags().StringVar(&reportFlags.since, "since", "24h", "range: a duration (90m, 24h, 3d, 1w), a date (2026-10-11) or a git ref")
 	reportCmd.Flags().BoolVar(&reportFlags.allAuthors, "all-authors", false, "in a time window, include other people's commits too")
 	reportCmd.Flags().BoolVar(&reportFlags.noRun, "no-run", false, "do not run make lint / make test")
 	reportCmd.Flags().BoolVar(&reportFlags.noFetch, "no-fetch", false, "do not git fetch first (offline)")

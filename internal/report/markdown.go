@@ -159,7 +159,7 @@ func (r *Report) Markdown() string {
 
 func rangeText(since string) string {
 	if m := reDuration.FindStringSubmatch(since); m != nil {
-		return "最近 " + m[1] + map[string]string{"h": " 小时", "d": " 天", "w": " 周"}[m[2]] + "内我的提交和未提交改动"
+		return "最近 " + m[1] + map[string]string{"m": " 分钟", "h": " 小时", "d": " 天", "w": " 周"}[m[2]] + "内我的提交和未提交改动"
 	}
 	if reDate.MatchString(since) {
 		return since + " 以来我的提交和未提交改动"

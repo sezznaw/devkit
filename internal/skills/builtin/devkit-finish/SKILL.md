@@ -13,15 +13,15 @@ description: 任务收尾——改完代码后跑 devkit report 拿到事实（�
 
 2. **部署后检查（AGENTS.md「给服务加一条部署后检查」）**。这次任务如果新增了对外的**读**能力——RPC 的查询方法、网关的读接口、后台的 `.view` 接口——在同一次提交里给它加一条只读检查：
    - 网关：扩 `app/verify.go` 里 `login-and-read` 那条，登录后多调一下新接口（公开接口直接 `gw.Post`）。
-   - RPC 服务：`app/verify.go` 的 `Checks(cfg, rt)` 加一项 `verifyx.Check{Name, Description, Run}`，用自己的客户端调新方法，参数无害（按 `VERIFY_USERNAME` 查、或分页取 1 条）；查不到数据返回 nil，返回 error 才算失败。
+   - RPC 服务：能扩现有的一条就不新开（在已有检查里多调一下新方法）；没有合适的再在 `app/verify.go` 的 `Checks(cfg, rt)` 加一项 `verifyx.Check{Name, Description, Run}`，用自己的客户端调新方法，参数无害（按 `VERIFY_USERNAME` 查、或分页取 1 条）；查不到数据返回 nil，返回 error 才算失败。
    - 写操作（下注、扣款、改状态）**不加**，除非对测试账号自己的数据幂等；拿不准就不加，在汇报里写原因。
    - 一个服务的检查十条以内、总共几秒跑完；本机 `make verify` 跑一遍。
 
 3. **拿事实**。在项目目录（有 `devkit.yaml` 的那一层）运行：
    ```bash
-   devkit report --since 24h        # 默认：最近 24 小时我的提交 + 未提交改动，并跑 make lint / make test
-   devkit report --since 3d         # 任务做了几天
-   devkit report --since <提交号>    # 从某个提交之后
+   devkit report --since 2h         # 任务刚做完：按开工时间给范围（90m、2h、3d、1w 都行），别用默认 24h 把同一天别的工作扫进来
+   devkit report --since <提交号>    # 更准：从开工前最后一个提交之后
+   devkit report                    # 默认 24h，并跑 make lint / make test
    ```
    它输出 Markdown；`--json` 给程序读。看三处：
    - **「⚠ 要先处理」**有内容就先处理：改了框架文件（归 devkit update 管，复原它）、kit-common 检出被改（`git -C kit-common checkout .`）、新加了 `@public` 或删了接口但没问过人（去问）。
