@@ -12,6 +12,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/sezznaw/devkit/internal/takeover"
+	"github.com/sezznaw/devkit/internal/ui"
 )
 
 var tunnelAll bool
@@ -51,27 +52,35 @@ devkit.yaml (takeover_ssh), so each project reaches its own environment.`,
 			return err
 		}
 		defer t.Close()
-		printTunnel(layout, env, tunnelAll)
-		fmt.Println("\ntunnel is up; Ctrl+C closes it. Credentials are shown once and written nowhere.")
+		printTunnel(layout, env, target, tunnelAll)
+		fmt.Printf("%s tunnel is up; Ctrl+C closes it. %s\n", ui.Stdout.Success("✓"), ui.Stdout.Dim("Credentials are shown once and written nowhere."))
 		select {
 		case <-ctx.Done():
 		case err := <-t.Done():
 			return fmt.Errorf("tunnel: the ssh connection ended: %v", err)
 		}
-		fmt.Println("closed")
+		fmt.Println(ui.Stdout.Dim("closed"))
 		return nil
 	},
 }
 
-// printTunnel prints one block per middleware a developer connects to: the
-// local address, a ready-made client command and the credentials whose
-// variable names mention that middleware. Business services and the rest of
-// the cluster's ports are forwarded too but only counted; --all lists
-// everything and every variable.
-func printTunnel(l *takeover.Layout, env *takeover.Env, all bool) {
+// printTunnel prints one block per middleware a developer connects to: a
+// heading with the local address and the cluster name, a ready-made client
+// command, then the credentials whose variable names mention that
+// middleware. Business services and the rest of the cluster's ports are
+// forwarded too but only counted; --all lists everything and every variable.
+func printTunnel(l *takeover.Layout, env *takeover.Env, target string, all bool) {
+	st := ui.Stdout
 	services := map[string]bool{}
 	for _, s := range env.Services {
 		services[s.Name] = true
+	}
+	namespace := map[string]string{}
+	for _, ep := range env.Infra {
+		namespace[ep.Name] = ep.Namespace
+	}
+	for _, s := range env.Services {
+		namespace[s.Name] = s.Namespace
 	}
 	clusterIP := map[string]bool{}
 	for _, f := range l.Forwards {
@@ -79,13 +88,13 @@ func printTunnel(l *takeover.Layout, env *takeover.Env, all bool) {
 			clusterIP[stem(f.What)] = true
 		}
 	}
+	fmt.Printf("%s %s %s\n\n", st.Heading("devkit tunnel"), st.Dim("→"), st.Dim(target))
 	used := map[string]bool{}
-	hidden, shown := 0, 0
+	hidden := 0
 	for _, f := range l.Forwards {
 		if f.Target == "" {
 			continue
 		}
-		how := howTo(f)
 		twin := strings.HasPrefix(f.Target, "10.42.") && clusterIP[stem(f.What)] && !strings.Contains(f.What, "mysql") && !strings.Contains(f.What, "valkey") && !strings.Contains(f.What, "redpanda")
 		// Default view: what a person connects a client to (MySQL, Redis,
 		// Nacos, Kafka, StarRocks, S3). Tempo, Centrifugo, the services:
@@ -94,30 +103,70 @@ func printTunnel(l *takeover.Layout, env *takeover.Env, all bool) {
 			hidden++
 			continue
 		}
-		shown++
-		fmt.Printf("%-28s 127.0.0.1:%d   %s\n", f.What, f.LocalPort, how)
+		name, port, _ := strings.Cut(f.What, " ")
+		cluster := name
+		if ns := namespace[name]; ns != "" {
+			cluster += "." + ns
+		}
+		if port != "" {
+			cluster += ":" + port
+		} else if i := strings.LastIndex(f.Target, ":"); i >= 0 {
+			cluster += f.Target[i:]
+		}
+		fmt.Printf("%s  %s  %s\n", st.Cyan(st.Bold(fmt.Sprintf("%-10s", kindName(name)))), st.Green(st.Bold(fmt.Sprintf("127.0.0.1:%d", f.LocalPort))), st.Dim(cluster))
+		if how := howTo(f); how != "" {
+			fmt.Printf("  %s\n", how)
+		}
 		for _, k := range sortedKeys(l.EnvVars) {
 			if !used[k] && relatedVar(k, f.What) {
 				used[k] = true
-				fmt.Printf("%-28s   %s=%s\n", "", k, l.EnvVars[k])
+				fmt.Printf("  %s  %s\n", st.Dim(fmt.Sprintf("%-40s", k)), l.EnvVars[k])
 			}
 		}
+		fmt.Println()
 	}
-	var rest []string
-	for _, k := range sortedKeys(l.EnvVars) {
-		if !used[k] && all {
-			rest = append(rest, k)
+	if all {
+		var rest []string
+		for _, k := range sortedKeys(l.EnvVars) {
+			if !used[k] {
+				rest = append(rest, k)
+			}
 		}
-	}
-	if len(rest) > 0 {
-		fmt.Printf("%-28s\n", "other settings")
-		for _, k := range rest {
-			fmt.Printf("%-28s   %s=%s\n", "", k, l.EnvVars[k])
+		if len(rest) > 0 {
+			fmt.Printf("%s\n", st.Cyan(st.Bold("other settings")))
+			for _, k := range rest {
+				fmt.Printf("  %s  %s\n", st.Dim(fmt.Sprintf("%-40s", k)), l.EnvVars[k])
+			}
+			fmt.Println()
 		}
 	}
 	if hidden > 0 {
-		fmt.Printf("\n%d more ports forwarded (the %d services at their port + 1000, Tempo, Centrifugo, internal RPC, metrics, probes); --all lists them with their settings\n", hidden, len(env.Services))
+		fmt.Println(st.Dim(fmt.Sprintf("%d more ports forwarded (the %d services at their port + 1000, Tempo, Centrifugo, internal RPC, metrics, probes); --all lists them with their settings", hidden, len(env.Services))))
 	}
+}
+
+// kindName is the friendly name of an infrastructure Service.
+func kindName(name string) string {
+	n := strings.ToLower(name)
+	switch {
+	case strings.Contains(n, "mysql"):
+		return "MySQL"
+	case strings.Contains(n, "valkey"), strings.Contains(n, "redis"):
+		return "Valkey"
+	case strings.Contains(n, "nacos"):
+		return "Nacos"
+	case strings.Contains(n, "redpanda"), strings.Contains(n, "kafka"):
+		return "Redpanda"
+	case strings.Contains(n, "starrocks"):
+		return "StarRocks"
+	case strings.Contains(n, "seaweed"), strings.Contains(n, "minio"):
+		return "S3"
+	case strings.Contains(n, "centrifugo"):
+		return "Centrifugo"
+	case strings.Contains(n, "tempo"):
+		return "Tempo"
+	}
+	return name
 }
 
 func sortedKeys(m map[string]string) []string {
