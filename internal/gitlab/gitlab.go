@@ -58,7 +58,7 @@ func (c *Client) get(ctx context.Context, path string, q url.Values, v any) (htt
 	defer res.Body.Close()
 	body, _ := io.ReadAll(io.LimitReader(res.Body, 4<<20))
 	if res.StatusCode == 401 {
-		return nil, fmt.Errorf("%s: the token was refused (401): run devkit login %s again", c.Host, c.Host)
+		return nil, fmt.Errorf("%s: the token was refused (401): run devkit auth %s again", c.Host, c.Host)
 	}
 	if res.StatusCode/100 != 2 {
 		return nil, fmt.Errorf("GET %s: %s: %s", u, res.Status, strings.TrimSpace(string(body)))

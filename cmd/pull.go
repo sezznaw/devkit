@@ -41,7 +41,7 @@ The first time, say which GitLab and group the project is (--gitlab,
 Run it again any time: new repositories are cloned, the others fast-forward
 (a repository with local changes is left alone and listed).
 
-  devkit login https://gitlab.example.com
+  devkit auth https://gitlab.example.com
   devkit pull sportsbook                      # ./sportsbook/...
   devkit pull sportsbook --group sportsbook --gitlab https://gitlab.example.com`,
 	Args: cobra.ExactArgs(1),
@@ -63,7 +63,7 @@ Run it again any time: new repositories are cloned, the others fast-forward
 			}
 		}
 		if host == "" {
-			return fmt.Errorf("which GitLab? run devkit login <url> first, or pass --gitlab (logged in: %s)", strings.Join(hostNames(store), ", "))
+			return fmt.Errorf("which GitLab? run devkit auth <url> first, or pass --gitlab (saved: %s)", strings.Join(hostNames(store), ", "))
 		}
 		host, err = hosts.Normalize(host)
 		if err != nil {
@@ -71,7 +71,7 @@ Run it again any time: new repositories are cloned, the others fast-forward
 		}
 		h, ok := store.Hosts[host]
 		if !ok {
-			return fmt.Errorf("not logged in to %s: devkit login %s", host, host)
+			return fmt.Errorf("no token saved for %s: devkit auth %s", host, host)
 		}
 		group := pullFlags.group
 		if group == "" && known {
@@ -249,7 +249,7 @@ func ensureProjectConfig(dir, host string, projects []gitlab.Project) error {
 }
 
 func init() {
-	pullCmd.Flags().StringVar(&pullFlags.gitlab, "gitlab", "", "the GitLab the project is on (default: the saved one, or the only login)")
+	pullCmd.Flags().StringVar(&pullFlags.gitlab, "gitlab", "", "the GitLab the project is on (default: the saved one, or the only one with a token)")
 	pullCmd.Flags().StringVar(&pullFlags.group, "group", "", "the GitLab group holding the project's repositories (default: the project name)")
 	pullCmd.Flags().StringVar(&pullFlags.dir, "dir", "", "where to put the project (default: ./<project>, or the current directory when it is named so)")
 	pullCmd.Flags().BoolVar(&pullFlags.noTools, "no-tools", false, "do not run make tools")
