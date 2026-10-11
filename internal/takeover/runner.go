@@ -93,9 +93,11 @@ func (r *Runner) up(ctx context.Context) error {
 	}
 	var whats []string
 	for _, f := range layout.Forwards {
-		whats = append(whats, fmt.Sprintf("%s→%d", f.What, f.LocalPort))
+		if KnownPort(f) {
+			whats = append(whats, fmt.Sprintf("%s→%d", f.What, f.LocalPort))
+		}
 	}
-	r.say("tunnel up: %s", strings.Join(whats, ", "))
+	r.say("tunnel up: %d forwards (%s, …)", len(layout.Forwards), strings.Join(whats, ", "))
 	r.say("advertise %s:%d → 127.0.0.1:%d", env.NodeIP, r.remote, r.o.LocalPort)
 
 	if err := r.connectNacos(ctx); err != nil {

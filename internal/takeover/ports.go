@@ -203,3 +203,21 @@ func decodeBase64(s string) (string, error) {
 	b, err := base64.StdEncoding.DecodeString(s)
 	return string(b), err
 }
+
+// KnownPort says whether a forward is one a developer would connect to by
+// hand: the main ports of MySQL, Redis, Nacos, Kafka, StarRocks, S3,
+// Centrifugo. Used to keep terminal output short.
+func KnownPort(f Forward) bool {
+	i := strings.LastIndex(f.Target, ":")
+	if i < 0 {
+		return false
+	}
+	name := strings.ToLower(f.What)
+	switch f.Target[i+1:] {
+	case "3306", "6379", "8848", "9030", "8333", "9000":
+		return true
+	case "9093", "9092":
+		return strings.Contains(name, "redpanda") || strings.Contains(name, "kafka")
+	}
+	return false
+}
