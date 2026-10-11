@@ -171,6 +171,11 @@ Run it again any time: new repositories are cloned, the others fast-forward
 			}
 			lockCommonQuietly(dir, func(string, ...any) {})
 			logf("%d service(s): pre-push hook installed, framework files locked", len(services))
+			if w, r, err := workspace.RefreshAISkills(dir); err != nil {
+				logf("warning: skills: %v", err)
+			} else if len(w)+len(r) > 0 {
+				logf("AI skills refreshed from %s (%d written, %d removed)", workspace.AISkillsSource, len(w), len(r))
+			}
 			if !pullFlags.noTools {
 				logf("make tools (the generators, once for the whole project) ...")
 				if out, err := run(ctx, services[0], "make", "tools"); err != nil {

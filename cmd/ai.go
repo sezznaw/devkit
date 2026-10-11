@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"sort"
+	"strings"
 
 	"github.com/spf13/cobra"
 
@@ -28,6 +29,11 @@ holds only what is in use.
   devkit ai --all           every tool
   devkit ai --clean         remove the pointers devkit wrote (edited files are kept)
 
+The project's skills (idl/skills/<name>/SKILL.md: the steps of one kind of
+task, loaded by the tool when that task comes up) are copied to
+.agents/skills/ and .claude/skills/ at the same time; devkit pull refreshes
+the copies when idl changes. Edit the source in idl, not the copies.
+
 A tool not listed reads the guide when told to: "先读 idl/AGENTS.md".`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		dir := workspace.Find(".")
@@ -42,6 +48,11 @@ A tool not listed reads the guide when told to: "先读 idl/AGENTS.md".`,
 			if err != nil {
 				return err
 			}
+			skills, err := workspace.CleanAISkills(dir)
+			if err != nil {
+				return err
+			}
+			removed = append(removed, skills...)
 			for _, r := range removed {
 				fmt.Println("removed", r)
 			}
@@ -64,6 +75,9 @@ A tool not listed reads the guide when told to: "先读 idl/AGENTS.md".`,
 				fmt.Printf("%-10s %-36s %s%s\n", f.Key, f.Path, f.Tools, mark)
 			}
 			fmt.Printf("\n%s is the guide; `devkit ai <tool>` writes the pointer for your tool.\n", workspace.AIRulesSource)
+			if skills := workspace.ListAISkills(dir); len(skills) > 0 {
+				fmt.Printf("skills in %s: %s (copied to %s by `devkit ai <tool>`)\n", workspace.AISkillsSource, strings.Join(skills, ", "), strings.Join(workspace.AISkillTargets, " and "))
+			}
 			return nil
 		}
 		sel, err := workspace.SelectAIPointers(args)
@@ -74,11 +88,19 @@ A tool not listed reads the guide when told to: "先读 idl/AGENTS.md".`,
 		if err != nil {
 			return err
 		}
+		skills, removed, err := workspace.SyncAISkills(dir)
+		if err != nil {
+			return err
+		}
+		written = append(written, skills...)
 		sort.Strings(written)
 		for _, w := range written {
 			fmt.Println("wrote", w)
 		}
-		if len(written) == 0 {
+		for _, r := range removed {
+			fmt.Println("removed", r)
+		}
+		if len(written)+len(removed) == 0 {
 			fmt.Println("already in place")
 		}
 		return nil

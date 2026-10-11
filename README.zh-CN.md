@@ -140,6 +140,14 @@ gemini、windsurf、junie、kiro、trae、cline、roo、augment、continue、lin
 的工具用 `agents`）；`--all` 全写，`--clean` 删掉 devkit 写过的。不主动写任何文件，项目目录里只有正在用的。
 在项目目录启动 AI，不要进到某个服务里，这样它同时看得到 IDL、各服务和部署。没有指针文件的工具，开始时告诉它读这个文件。
 
+AGENTS.md 放规矩；常做的几种任务的**分步做法**是 skill：`idl/skills/<名字>/SKILL.md`（开头 `name`、`description`，正文是步骤；开放的
+Agent Skills 格式）。`devkit ai <工具>` 把它们复制到 `.agents/skills/`（Codex、Copilot、Cursor、Gemini CLI、Windsurf 读这里）和
+`.claude/skills/`（Claude Code 读这里），工具在做那种任务时自动加载；`devkit pull` 刷新副本，`devkit ai --clean` 删掉。改 idl 里的源文件，不改副本。
+
+`devkit report` 是收尾那一步：在项目目录里跑，从 git 和构建里取出这次工作的事实——改了哪些仓库、提交和是否已推送、改了哪些文件（改到框架文件会标出）、
+IDL 新增的方法 / 结构体 / 错误码、`make lint` / `make test` 结果、`app/verify.go`（部署后检查）有没有改——输出一份 Markdown 汇报，
+只给作者留几处 `（填写：…）`：做了什么功能、怎么验证的、还要人做什么。`--since 24h|3d|<提交号>` 定范围，`--no-run` 不跑 lint 和测试，`--json` 给程序读。
+
 ### Lint：团队规矩的机器检查
 
 `devkit lint`（`make lint` 在本机和 CI 里都会跑）按团队规矩检查服务，不管代码是谁写的。通用规则所有项目一样：不许自己连中间件
@@ -200,6 +208,7 @@ echo 'source "$HOME/.devkit/env"' >> ~/.zshrc    # 或 ~/.bashrc
 | `devkit lint` | 按团队规矩检查服务（`make lint` 跑的就是它），见上文 |
 | `devkit hooks` | 装 git pre-push 钩子：每次推送前跑 `make lint && make test`（和 CI 的 test 阶段一样；`--remove` 卸掉，`git push --no-verify` 跳过一次）。`ngs` 和 `update` 也会装 |
 | `devkit lock` | 把框架文件和生成物设为只读，编辑器会提示（`ngs`、`update`、`make gen` 都会做；`--unlock` 恢复，`--list` 列出文件，`-q` 是 Makefile 传的）。项目的 `kit-common/` 检出也一起锁。只是提醒：lint、钩子和 CI 仍然说了算 |
+| `devkit report` | 这次工作的事实汇总（Markdown，留几处给作者填）：改了哪些仓库和文件、提交与推送状态、IDL 新增的方法 / 结构体 / 错误码、lint 与测试结果、部署后检查有没有改。`--since 24h\|3d\|<提交号>`、`--no-run`、`--json` |
 | `devkit doctor` | 对照团队版本查看 git、Go、kitex、thriftgo、hz 的状态。`--fix` 安装缺失的工具，并替换版本不对的生成器 |
 | `devkit version` | 报问题时提供版本信息 |
 

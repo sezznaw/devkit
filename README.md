@@ -204,6 +204,23 @@ is in use. Start the AI in the project directory, not inside a service, so
 it sees the IDL, the services and the infrastructure together. A tool
 without a pointer reads the guide when told to.
 
+The guide holds the rules; the step-by-step procedures of the recurring
+tasks are **skills**: `idl/skills/<name>/SKILL.md` (frontmatter `name`,
+`description`, then the steps; the open Agent Skills format). `devkit ai
+<tool>` copies them to `.agents/skills/` (Codex, Copilot, Cursor, Gemini
+CLI, Windsurf) and `.claude/skills/` (Claude Code), where the tools load a
+skill when its task comes up; `devkit pull` refreshes the copies, `devkit
+ai --clean` removes them. Edit the source in idl, never the copies.
+
+`devkit report` is the finishing step: it collects the facts of a piece of
+work from git and the build across every repository of the project
+(repositories, commits and pushed state, files with framework files
+flagged, what the IDL gained in methods, structs and error codes, `make
+lint` / `make test` results, whether `app/verify.go` was touched) and
+prints a Markdown hand-over with blanks for what only the author knows.
+`--since 24h|3d|<ref>` sets the range, `--no-run` skips lint and tests,
+`--json` is for tools.
+
 ### Lint: the team's rules, enforced
 
 `devkit lint` (what `make lint` runs, locally and in CI) checks a service
@@ -309,6 +326,7 @@ echo 'source "$HOME/.devkit/env"' >> ~/.zshrc    # or ~/.bashrc
 | `devkit hooks` | install the git pre-push hook that runs `make lint && make test` before every push (what CI's test stage runs; `--remove` to drop it, `git push --no-verify` to skip once). `ngs` and `update` install it too |
 | `devkit lock` | make the framework's files and generated code read-only, so the editor says so (`ngs`, `update` and `make gen` do it; `--unlock` undoes it, `--list` shows the files, `-q` is what the Makefile passes). The project's `kit-common/` checkout is locked too. A reminder: lint, the hook and CI still decide |
 | `devkit auth <gitlab-url>` | save a GitLab personal access token (asked interactively) for this machine: devkit's API calls, git over HTTPS and go's private modules all use it (~/.devkit/hosts.yaml, ~/.netrc, GOPRIVATE) |
+| `devkit report` | the facts of a piece of work across the project's repositories, as a Markdown hand-over with blanks for what only the author knows: repositories, commits, pushed state, files (framework files flagged), IDL methods / structs / error codes, lint and test results, post-deploy check touched or not. `--since 24h\|3d\|<ref>`, `--no-run`, `--json` |
 | `devkit pull <project>` | clone every repository of the project's GitLab group you can see into ./<project>/, flat, and set the directory up (devkit.yaml, go.work, kit-common/, hooks, locks, make tools); run again to update. First time: `--gitlab`, `--group` when they differ from the saved/only token and the project name |
 | `devkit doctor` | show the state of git, Go, kitex, thriftgo and hz against the team's versions. `--fix` installs what is missing and replaces a generator of another version |
 | `devkit version` | version info for bug reports |

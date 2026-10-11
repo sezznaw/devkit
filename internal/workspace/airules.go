@@ -14,6 +14,14 @@ const AIRulesSource = "idl/AGENTS.md"
 // aiPointer is the text of every pointer file: it only sends the tool to
 // the source. Content lives in one place; these files never carry rules.
 const aiPointer = `先完整阅读 idl/AGENTS.md，再开始任何任务。它是本项目唯一的开发流程说明，所有 AI 工具共用。
+idl/skills/ 下每个目录是一种任务的分步做法（SKILL.md）；做那种任务前先读它（装了 skill 的工具会自动加载）。
+Read idl/AGENTS.md in full before starting any task. It is the project's only development guide, shared by every AI tool.
+Each directory under idl/skills/ holds the steps of one kind of task (SKILL.md); read it before doing that task (tools with skill support load it themselves).
+`
+
+// legacyPointer is the text devkit wrote before skills existed; a file with
+// it still counts as devkit's (so devkit ai --clean removes it).
+const legacyPointer = `先完整阅读 idl/AGENTS.md，再开始任何任务。它是本项目唯一的开发流程说明，所有 AI 工具共用。
 Read idl/AGENTS.md in full before starting any task. It is the project's only development guide, shared by every AI tool.
 `
 
@@ -135,7 +143,7 @@ func PresentAIPointers(dir string) map[string]string {
 		if err != nil {
 			continue
 		}
-		if string(cur) == f.Content {
+		if isDevkitPointer(string(cur), f) {
 			out[f.Key] = "devkit"
 		} else {
 			out[f.Key] = "yours"
@@ -151,7 +159,7 @@ func CleanAIPointers(dir string) ([]string, error) {
 	for _, f := range AIPointerFiles {
 		p := filepath.Join(dir, f.Path)
 		cur, err := os.ReadFile(p)
-		if err != nil || string(cur) != f.Content {
+		if err != nil || !isDevkitPointer(string(cur), f) {
 			continue
 		}
 		if err := os.Remove(p); err != nil {
@@ -165,4 +173,13 @@ func CleanAIPointers(dir string) ([]string, error) {
 		}
 	}
 	return removed, nil
+}
+
+// isDevkitPointer says whether a file's content is one devkit wrote for f,
+// now or in an earlier version.
+func isDevkitPointer(cur string, f AIPointer) bool {
+	if cur == f.Content {
+		return true
+	}
+	return strings.Contains(f.Content, aiPointer) && cur == strings.Replace(f.Content, aiPointer, legacyPointer, 1)
 }
