@@ -209,6 +209,7 @@ echo 'source "$HOME/.devkit/env"' >> ~/.zshrc    # 或 ~/.bashrc
 | `devkit lint` | 按团队规矩检查服务（`make lint` 跑的就是它），见上文 |
 | `devkit hooks` | 装 git pre-push 钩子：每次推送前跑 `make lint && make test`（和 CI 的 test 阶段一样；`--remove` 卸掉，`git push --no-verify` 跳过一次）。`ngs` 和 `update` 也会装 |
 | `devkit lock` | 把框架文件和生成物设为只读，编辑器会提示（`ngs`、`update`、`make gen` 都会做；`--unlock` 恢复，`--list` 列出文件，`-q` 是 Makefile 传的）。项目的 `kit-common/` 检出也一起锁。只是提醒：lint、钩子和 CI 仍然说了算 |
+| `devkit takeover <服务>` | 从本机接管 dev 的一个服务：只有带 `X-Dev-Tag: <你的 tag>` 的请求会到本机这个实例（IDE 里打断点），其余照常走 dev；一条 ssh 隧道到节点，本地端口在监听时把本机实例注册进 Nacos，写一个标记文件让服务按 dev 配置、经隧道连中间件、不注册、不跑后台任务。停掉就回去。`takeover list` 看谁在接管。需要服务用上 kit-common 的 devroute（只在 `APP_ENV=dev` 开）和节点上的 `takeover` 账号（infra 配） |
 | `devkit report` | 这次工作的事实汇总（Markdown，留几处给作者填）：改了哪些仓库和文件、提交与推送状态、IDL 新增的方法 / 结构体 / 错误码、lint 与测试结果、部署后检查有没有改。`--since 24h\|3d\|<提交号>`、`--no-run`、`--json` |
 | `devkit doctor` | 对照团队版本查看 git、Go、kitex、thriftgo、hz 的状态。`--fix` 安装缺失的工具，并替换版本不对的生成器 |
 | `devkit version` | 报问题时提供版本信息 |
