@@ -209,8 +209,8 @@ func decodeBase64(s string) (string, error) {
 }
 
 // KnownPort says whether a forward is one a developer would connect to by
-// hand: the main ports of MySQL, Redis, Nacos, Kafka, StarRocks, S3,
-// Centrifugo. Used to keep terminal output short.
+// hand: the main ports of MySQL, Redis, Nacos, Kafka, StarRocks, S3. Used to
+// keep terminal output short.
 func KnownPort(f Forward) bool {
 	i := strings.LastIndex(f.Target, ":")
 	if i < 0 {
@@ -218,7 +218,7 @@ func KnownPort(f Forward) bool {
 	}
 	name := strings.ToLower(f.What)
 	switch f.Target[i+1:] {
-	case "3306", "6379", "8848", "9030", "8333", "9000":
+	case "3306", "6379", "8848", "9030", "8333":
 		return true
 	case "9093", "9092":
 		return strings.Contains(name, "redpanda") || strings.Contains(name, "kafka")

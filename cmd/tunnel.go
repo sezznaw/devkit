@@ -87,7 +87,10 @@ func printTunnel(l *takeover.Layout, env *takeover.Env, all bool) {
 		}
 		how := howTo(f)
 		twin := strings.HasPrefix(f.Target, "10.42.") && clusterIP[stem(f.What)] && !strings.Contains(f.What, "mysql") && !strings.Contains(f.What, "valkey") && !strings.Contains(f.What, "redpanda")
-		if !all && (how == "" || twin || services[f.What]) {
+		// Default view: what a person connects a client to (MySQL, Redis,
+		// Nacos, Kafka, StarRocks, S3). Tempo, Centrifugo, the services:
+		// things services talk to, --all.
+		if !all && (!takeover.KnownPort(f) || twin || services[f.What]) {
 			hidden++
 			continue
 		}
@@ -102,7 +105,7 @@ func printTunnel(l *takeover.Layout, env *takeover.Env, all bool) {
 	}
 	var rest []string
 	for _, k := range sortedKeys(l.EnvVars) {
-		if !used[k] && (all || looksSecret(k)) {
+		if !used[k] && all {
 			rest = append(rest, k)
 		}
 	}
@@ -113,7 +116,7 @@ func printTunnel(l *takeover.Layout, env *takeover.Env, all bool) {
 		}
 	}
 	if hidden > 0 {
-		fmt.Printf("\n%d more ports forwarded (the %d services at their port + 1000, internal RPC, metrics, probes); --all lists them\n", hidden, len(env.Services))
+		fmt.Printf("\n%d more ports forwarded (the %d services at their port + 1000, Tempo, Centrifugo, internal RPC, metrics, probes); --all lists them with their settings\n", hidden, len(env.Services))
 	}
 }
 
@@ -151,16 +154,6 @@ func relatedVar(name, what string) bool {
 					return true
 				}
 			}
-		}
-	}
-	return false
-}
-
-func looksSecret(name string) bool {
-	n := strings.ToUpper(name)
-	for _, x := range []string{"PASSWORD", "SECRET", "TOKEN", "KEY"} {
-		if strings.Contains(n, x) {
-			return true
 		}
 	}
 	return false
