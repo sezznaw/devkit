@@ -348,7 +348,7 @@ func runNew(ctx context.Context, kind serviceKind, name string) error {
 		fmt.Printf("  the IDL is in %s, a local git repository; when you have a git server,\n", idlDir)
 		fmt.Printf("  push it there and put its address into idl_repo in %s\n", settings)
 	default:
-		fmt.Printf("  commit and push idl/%s/%s.thrift to the IDL repository so others can use it\n", name, name)
+		fmt.Printf("  commit and push idl/%s/ to the IDL repository so others can use it\n", name)
 	}
 	fmt.Printf("  create the remote repository for %s and push the service\n", module)
 	if createdSettings {
