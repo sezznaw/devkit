@@ -1,7 +1,0 @@
-# devkit workspace settings. Commit this file if the workspace is a repository.
-module_prefix: sportsbook
-idl_repo: https://gitlab.sk1k2b.buzz/sportsbook/backend/idl.git
-vars:
-    LocalMySQLDB: tenant_a
-    LocalMySQLPassword: tenant_a
-    LocalMySQLUser: tenant_a
