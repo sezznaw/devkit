@@ -36,6 +36,9 @@ type LintRules struct {
 	// ErrorsFile is the business-code table, relative to the IDL directory
 	// (rule error-code). Empty: the rule is off.
 	ErrorsFile string `yaml:"errors_file"`
+	// HandlerMethods is how many RPC methods one file under handler/ may
+	// hold before rule handler-split asks for a split by topic (default 8).
+	HandlerMethods int `yaml:"handler_methods"`
 	// Disable lists rules this project does not want.
 	Disable []string `yaml:"disable"`
 }

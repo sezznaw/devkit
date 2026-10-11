@@ -52,6 +52,9 @@ type Options struct {
 	ErrorsFile string
 	// Disable lists rule names to skip.
 	Disable []string
+	// HandlerMethods is the most RPC methods one handler file may hold
+	// (rule handler-split); 0 means the default, 8.
+	HandlerMethods int
 	// ProjectDir is the project directory holding the kit-common/ checkout;
 	// "" skips the common-checkout rule (set it for one service of a run).
 	ProjectDir string
@@ -91,6 +94,9 @@ func Run(o Options) ([]Finding, error) {
 	out = append(out, checkCommonVersion(o.Root, m)...)
 	out = append(out, checkCommonCheckout(o.ProjectDir)...)
 	out = append(out, checkTests(o.Root)...)
+	if !isAPIService(m) {
+		out = append(out, checkHandlerSplit(o.Root, o.HandlerMethods)...)
+	}
 	if o.ReportService != "" && service != o.ReportService {
 		out = append(out, checkReportOnly(o.Root, o.ReportService)...)
 	}

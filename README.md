@@ -197,7 +197,9 @@ with `hertzx.OK` / `hertzx.Fail`, which add the `{code, msg, data}` envelope
 once, and RPC failures are BizStatusErrors) and no raw `c.JSON` in a gateway
 handler (`envelope-write`), one file per gateway domain whose name,
 namespace and route segment agree and which includes only common
-(`domain-file`, `domain-path`, `domain-include`), framework files
+(`domain-file`, `domain-path`, `domain-include`), an RPC handler split by
+topic (`handler-split`: handler.go holds struct, New and Ping; at most
+`lint.handler_methods` RPC methods per file, default 8), framework files
 untouched, the common library at the
 team's version in go.mod (`common-version`) and the project's `kit-common/`
 checkout clean (`common-checkout`: go.work makes local builds use it), zlog
