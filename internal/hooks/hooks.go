@@ -14,7 +14,7 @@ import (
 )
 
 // Marker identifies a hook written by devkit (and its version).
-const Marker = "# devkit hooks v1"
+const Marker = "# devkit hooks v2"
 
 // PrePush is the pre-push hook.
 const PrePush = `#!/bin/sh
@@ -22,6 +22,16 @@ const PrePush = `#!/bin/sh
 # Refuses a push that would fail CI: the pipeline's test stage runs the same
 # make lint && make test. Skip once with: git push --no-verify (CI still
 # checks). Remove with: devkit hooks --remove.
+# git hands the refs on stdin: <local ref> <local sha> <remote ref> <remote sha>.
+# A push that only deletes branches (local sha all zeros) ships no code.
+pushing=0
+while read -r local_ref local_sha remote_ref remote_sha; do
+  case "$local_sha" in
+    0000000000000000000000000000000000000000) ;;
+    *) pushing=1 ;;
+  esac
+done
+[ "$pushing" = 1 ] || exit 0
 cd "$(git rev-parse --show-toplevel)" || exit 1
 [ -f Makefile ] || exit 0
 echo ">> devkit pre-push: make lint && make test"
