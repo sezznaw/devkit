@@ -41,9 +41,11 @@ const errRemotePortTaken = "remote port forwarding failed"
 // target may be an alias of ~/.ssh/config, but one without LocalForward /
 // RemoteForward lines of its own: ExitOnForwardFailure makes any forward
 // that cannot be set up fatal, and ClearAllForwardings would drop ours too.
-func Open(ctx context.Context, target string, forwards []Forward, rev Reverse) (t *Tunnel, taken bool, err error) {
-	sock := filepath.Join(os.TempDir(), fmt.Sprintf("devkit-takeover-%d.sock", os.Getpid()))
-	os.Remove(sock)
+func Open(ctx context.Context, target, name string, forwards []Forward, rev Reverse) (t *Tunnel, taken bool, err error) {
+	// One control socket per service, not per process: a tool that died
+	// without cleaning up (kill -9) leaves its ssh behind, and the next run
+	// for the same service finds and ends it here.
+	sock := EndStale(target, name)
 	args := []string{"-N", "-M", "-S", sock,
 		"-o", "ControlPersist=no", "-o", "ExitOnForwardFailure=yes",
 		"-o", "ServerAliveInterval=5", "-o", "ServerAliveCountMax=2",
@@ -83,6 +85,19 @@ func Open(ctx context.Context, target string, forwards []Forward, rev Reverse) (
 	}
 	t.Close()
 	return nil, false, fmt.Errorf("takeover: ssh %s did not come up in 20s\n%s", target, strings.TrimSpace(t.stderr.String()))
+}
+
+// EndStale ends the ssh a previous run for name left behind (kill -9 does
+// not clean up) and returns the control socket path for this one. Run it
+// before planning ports, so the old forwards do not count as taken.
+func EndStale(target, name string) string {
+	sock := filepath.Join(os.TempDir(), fmt.Sprintf("devkit-takeover-%s.sock", name))
+	if _, err := os.Stat(sock); err == nil {
+		_ = exec.Command("ssh", "-S", sock, "-O", "exit", target).Run()
+		time.Sleep(300 * time.Millisecond)
+	}
+	os.Remove(sock)
+	return sock
 }
 
 // alive asks the control master.

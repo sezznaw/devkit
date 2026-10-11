@@ -67,6 +67,7 @@ func (r *Runner) up(ctx context.Context) error {
 	if !r.serviceKnown() {
 		return fmt.Errorf("takeover: the environment has no service %q (known: %s)", r.o.Service, r.serviceNames())
 	}
+	EndStale(r.o.SSH, r.o.Service) // a previous run's tunnel would hold our ports
 	layout, err := Plan(env, PortTaken)
 	if err != nil {
 		return err
@@ -77,7 +78,7 @@ func (r *Runner) up(ctx context.Context) error {
 	r.layout = layout
 	for attempt := 0; attempt < 10; attempt++ {
 		r.remote = RemotePort(r.o.Service, r.o.Tag, attempt)
-		t, taken, err := Open(ctx, r.o.SSH, layout.Forwards, Reverse{NodeIP: env.NodeIP, RemotePort: r.remote, LocalPort: r.o.LocalPort})
+		t, taken, err := Open(ctx, r.o.SSH, r.o.Service, layout.Forwards, Reverse{NodeIP: env.NodeIP, RemotePort: r.remote, LocalPort: r.o.LocalPort})
 		if err != nil {
 			return err
 		}
@@ -301,7 +302,7 @@ func (r *Runner) reconnect(ctx context.Context) error {
 			return nil
 		case <-time.After(wait):
 		}
-		t, taken, err := Open(ctx, r.o.SSH, r.layout.Forwards, Reverse{NodeIP: r.env.NodeIP, RemotePort: r.remote, LocalPort: r.o.LocalPort})
+		t, taken, err := Open(ctx, r.o.SSH, r.o.Service, r.layout.Forwards, Reverse{NodeIP: r.env.NodeIP, RemotePort: r.remote, LocalPort: r.o.LocalPort})
 		if err == nil && !taken {
 			r.tunnel = t
 			if err := r.connectNacos(ctx); err != nil {

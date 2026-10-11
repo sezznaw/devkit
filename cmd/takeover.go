@@ -97,7 +97,7 @@ var takeoverListCmd = &cobra.Command{
 				nacosFwd = append(nacosFwd, f)
 			}
 		}
-		t, taken, err := takeover.Open(ctx, target, nacosFwd, takeover.Reverse{NodeIP: env.NodeIP, RemotePort: takeover.RemotePort("list", osUser(), 0), LocalPort: 1})
+		t, taken, err := takeover.Open(ctx, target, "list-"+osUser(), nacosFwd, takeover.Reverse{NodeIP: env.NodeIP, RemotePort: takeover.RemotePort("list", osUser(), 0), LocalPort: 1})
 		if err != nil || taken {
 			return fmt.Errorf("tunnel: %v", err)
 		}
