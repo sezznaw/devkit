@@ -170,7 +170,7 @@ func Collect(dir string, opt Options) (*Report, error) {
 			r.Warnings = append(r.Warnings, fmt.Sprintf("%s/ 是框架检出，有本地改动或提交；lint 规则 common-checkout 会报，`git -C %s checkout .` 复原", rp.Name, rp.Name))
 		}
 		if len(rp.Framework) > 0 && !rp.Upgraded {
-			r.Warnings = append(r.Warnings, fmt.Sprintf("%s 改了框架文件 %s：这些由 devkit update 覆盖，不归你改（AGENTS.md 4.3）", rp.Name, strings.Join(rp.Framework, ", ")))
+			r.Warnings = append(r.Warnings, fmt.Sprintf("%s 改了框架文件 %s：这些由 devkit update 覆盖，不归你改（见 idl/AGENTS.md「哪些文件不归你改」）", rp.Name, strings.Join(rp.Framework, ", ")))
 		}
 	}
 	r.Repos = changed
@@ -179,11 +179,11 @@ func Collect(dir string, opt Options) (*Report, error) {
 			r.IDL = idlChanges(rp)
 			for _, f := range r.IDL.Flags {
 				if f.Name == "@public" {
-					r.Warnings = append(r.Warnings, fmt.Sprintf("idl/%s 新增 @public（免登录接口）：要人确认过（AGENTS.md 第 5 节）", f.File))
+					r.Warnings = append(r.Warnings, fmt.Sprintf("idl/%s 新增 @public（免登录接口）：要人确认过（见 idl/AGENTS.md「必须停下来问人的事」）", f.File))
 				}
 			}
 			if n := len(r.IDL.Removed); n > 6 {
-				r.Warnings = append(r.Warnings, fmt.Sprintf("idl 删掉了 %d 个方法 / 结构体 / 错误码（清单在「接口与错误码」一节）：删接口、删字段要先问人", n))
+				r.Warnings = append(r.Warnings, fmt.Sprintf("idl 删掉了 %d 个方法 / 结构体 / 错误码（清单在「接口与错误码」一节）：删接口、删字段要先问人（见 idl/AGENTS.md「必须停下来问人的事」）", n))
 			} else {
 				for _, d := range r.IDL.Removed {
 					r.Warnings = append(r.Warnings, fmt.Sprintf("idl/%s 删掉了 %s %s：删接口、删字段要先问人", d.File, d.Kind, d.Name))
