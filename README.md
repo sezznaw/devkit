@@ -243,7 +243,9 @@ no outbox relay, no delayed tasks, no metrics port. Routing lives in
 kit-common (`devroute`): on in `APP_ENV=dev`, off in uat and prod, where
 nothing of it is on the request path. The ssh target comes from the IDL
 repository's devkit.yaml (`takeover_ssh`); `~/.devkit/takeover.yaml` can
-override it and the tag.
+override it and the tag per project (`projects: {<dir name>: {ssh, tag}}`).
+`devkit tunnel` opens the same connection without taking anything over, for
+a database client or the Nacos console on this machine.
 
 ### Lint: the team's rules, enforced
 
@@ -351,6 +353,7 @@ echo 'source "$HOME/.devkit/env"' >> ~/.zshrc    # or ~/.bashrc
 | `devkit lock` | make the framework's files and generated code read-only, so the editor says so (`ngs`, `update` and `make gen` do it; `--unlock` undoes it, `--list` shows the files, `-q` is what the Makefile passes). The project's `kit-common/` checkout is locked too. A reminder: lint, the hook and CI still decide |
 | `devkit auth <gitlab-url>` | save a GitLab personal access token (asked interactively) for this machine: devkit's API calls, git over HTTPS and go's private modules all use it (~/.devkit/hosts.yaml, ~/.netrc, GOPRIVATE) |
 | `devkit takeover <service>` | take a service of the development environment over from this machine for the requests that carry `X-Dev-Tag: <your tag>`: one ssh tunnel to the environment's node, the local instance registered in Nacos while it listens, a marker file the service reads to run against the environment (tunnelled addresses, no registration, no background workers). Everything else keeps going to the environment's own instances; stop and traffic is back. `takeover list` shows who takes what. Needs kit-common's devroute in the services (on in `APP_ENV=dev` only) and the `takeover` account on the node (infra) |
+| `devkit tunnel` | reach the development environment's middleware from this machine: the same ssh connection as takeover with the local forwards only (MySQL 13306, Redis 16379, Nacos 18848, Kafka 19093 ... infrastructure port + 10000, services + 1000), the deployments' credentials printed once to the terminal, nothing written. Run in the project directory; Ctrl+C closes it |
 | `devkit report` | the facts of a piece of work across the project's repositories, as a Markdown hand-over with blanks for what only the author knows: repositories, commits, pushed state, files (framework files flagged), IDL methods / structs / error codes, lint and test results, post-deploy check touched or not. `--since 24h\|3d\|<ref>`, `--no-run`, `--json` |
 | `devkit pull <project>` | clone every repository of the project's GitLab group you can see into ./<project>/, flat, and set the directory up (devkit.yaml, go.work, kit-common/, hooks, locks, make tools); run again to update. First time: `--gitlab`, `--group` when they differ from the saved/only token and the project name |
 | `devkit doctor` | show the state of git, Go, kitex, thriftgo and hz against the team's versions. `--fix` installs what is missing and replaces a generator of another version |

@@ -24,7 +24,8 @@ type Tunnel struct {
 	done   chan error
 }
 
-// Reverse is the -R: nodeIP:RemotePort -> 127.0.0.1:LocalPort.
+// Reverse is the -R: nodeIP:RemotePort -> 127.0.0.1:LocalPort. A zero
+// RemotePort means no -R (devkit tunnel).
 type Reverse struct {
 	NodeIP     string
 	RemotePort int
@@ -56,7 +57,10 @@ func Open(ctx context.Context, target, name string, forwards []Forward, rev Reve
 		}
 		args = append(args, "-L", fmt.Sprintf("127.0.0.1:%d:%s", f.LocalPort, f.Target))
 	}
-	args = append(args, "-R", fmt.Sprintf("%s:%d:127.0.0.1:%d", rev.NodeIP, rev.RemotePort, rev.LocalPort), target)
+	if rev.RemotePort > 0 {
+		args = append(args, "-R", fmt.Sprintf("%s:%d:127.0.0.1:%d", rev.NodeIP, rev.RemotePort, rev.LocalPort))
+	}
+	args = append(args, target)
 	t = &Tunnel{Target: target, sock: sock, done: make(chan error, 1)}
 	t.cmd = exec.Command("ssh", args...)
 	t.cmd.Stderr = &t.stderr

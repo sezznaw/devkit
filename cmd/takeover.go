@@ -45,8 +45,9 @@ stack), and registers the local instance in Nacos while its port listens.
   devkit takeover list                who takes what over right now
 
 The ssh target comes from the project's devkit.yaml (takeover_ssh), the tag
-from devkit auth's GitLab user name; ~/.devkit/takeover.yaml (ssh:, tag:)
-overrides both. Your public key must be in the node's takeover account.`,
+from devkit auth's GitLab user name; ~/.devkit/takeover.yaml overrides both,
+per project (projects: {<project dir name>: {ssh:, tag:}}). Your public key
+must be in the node's takeover account.`,
 	Args: cobra.MaximumNArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		service, dir, port, err := locateService(args)
@@ -154,21 +155,45 @@ var takeoverEnvCmd = &cobra.Command{
 	},
 }
 
-// takeoverUser is ~/.devkit/takeover.yaml.
+// takeoverUser is one project's entry of ~/.devkit/takeover.yaml:
+//
+//	projects:
+//	  sportsbook: {ssh: sportsbook.dev-takeover, tag: turtle}
+//	  casino:     {ssh: takeover@10.0.0.9}
+//
+// keyed by the project directory's name, like hosts.yaml's projects. Top
+// level ssh/tag apply to every project (one project only).
 type takeoverUser struct {
 	SSH string `yaml:"ssh"`
 	Tag string `yaml:"tag"`
 }
 
+type takeoverUserFile struct {
+	takeoverUser `yaml:",inline"`
+	Projects     map[string]takeoverUser `yaml:"projects"`
+}
+
 func loadTakeoverUser() takeoverUser {
-	var u takeoverUser
+	var f takeoverUserFile
 	dir, err := config.Dir()
 	if err != nil {
-		return u
+		return takeoverUser{}
 	}
 	b, err := os.ReadFile(filepath.Join(dir, "takeover.yaml"))
-	if err == nil {
-		_ = yaml.Unmarshal(b, &u)
+	if err != nil {
+		return takeoverUser{}
+	}
+	_ = yaml.Unmarshal(b, &f)
+	u := f.takeoverUser
+	if ws := workspace.Find("."); ws != "" {
+		if p, ok := f.Projects[filepath.Base(ws)]; ok {
+			if p.SSH != "" {
+				u.SSH = p.SSH
+			}
+			if p.Tag != "" {
+				u.Tag = p.Tag
+			}
+		}
 	}
 	return u
 }
