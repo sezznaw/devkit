@@ -66,3 +66,31 @@ func LoadProjectRules(idlDir string) (ProjectRules, error) {
 	}
 	return r, nil
 }
+
+// SharedProject is the `project:` block of the IDL repository's devkit.yaml:
+// the settings every developer's project directory shares (devkit pull
+// copies them into <project>/devkit.yaml), as opposed to the lint rules.
+type SharedProject struct {
+	ModulePrefix string            `yaml:"module_prefix"`
+	GoPrivate    bool              `yaml:"go_private"`
+	Vars         map[string]string `yaml:"vars"`
+}
+
+// LoadSharedProject reads the `project:` block of <idlDir>/devkit.yaml; nil
+// when the file or the block is missing.
+func LoadSharedProject(idlDir string) (*SharedProject, error) {
+	b, err := os.ReadFile(filepath.Join(idlDir, ConfigFile))
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	var doc struct {
+		Project *SharedProject `yaml:"project"`
+	}
+	if err := yaml.Unmarshal(b, &doc); err != nil {
+		return nil, fmt.Errorf("%s: %w", filepath.Join(idlDir, ConfigFile), err)
+	}
+	return doc.Project, nil
+}

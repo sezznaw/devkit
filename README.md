@@ -9,6 +9,14 @@ installs the tools the service needs and keeps the scaffolding up to date.
 
 ## Get started
 
+**Joining an existing project** is two commands: `devkit login https://gitlab.example.com`
+(paste a personal access token with api, read_repository, write_repository), then
+`devkit pull <project>` in the directory you keep code in. Every repository you have
+access to lands in `./<project>/`, the directory is set up (go.work, the shared
+library checkout, hooks, locks, generators), and `devkit ai <tool>` points your AI
+tool at the project's AGENTS.md. Starting a new project is below.
+
+
 **1. Install**
 
 ```sh
@@ -300,6 +308,8 @@ echo 'source "$HOME/.devkit/env"' >> ~/.zshrc    # or ~/.bashrc
 | `devkit lint` | check the service against the team's rules (what `make lint` runs); see above |
 | `devkit hooks` | install the git pre-push hook that runs `make lint && make test` before every push (what CI's test stage runs; `--remove` to drop it, `git push --no-verify` to skip once). `ngs` and `update` install it too |
 | `devkit lock` | make the framework's files and generated code read-only, so the editor says so (`ngs`, `update` and `make gen` do it; `--unlock` undoes it, `--list` shows the files, `-q` is what the Makefile passes). The project's `kit-common/` checkout is locked too. A reminder: lint, the hook and CI still decide |
+| `devkit login <gitlab-url>` | save a GitLab personal access token (asked interactively) for this machine: devkit's API calls, git over HTTPS and go's private modules all use it (~/.devkit/hosts.yaml, ~/.netrc, GOPRIVATE) |
+| `devkit pull <project>` | clone every repository of the project's GitLab group you can see into ./<project>/, flat, and set the directory up (devkit.yaml, go.work, kit-common/, hooks, locks, make tools); run again to update. First time: `--gitlab`, `--group` when they differ from the saved/only login and the project name |
 | `devkit doctor` | show the state of git, Go, kitex, thriftgo and hz against the team's versions. `--fix` installs what is missing and replaces a generator of another version |
 | `devkit version` | version info for bug reports |
 

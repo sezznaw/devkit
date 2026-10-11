@@ -24,8 +24,12 @@ import (
 )
 
 const (
-	DirName  = ".devkit"
-	FileName = "config.yaml"
+	DirName = ".devkit"
+	// DefaultRegistryRepo / DefaultDevkitRepo are where the templates and devkit
+	// itself live (GitHub); a config.yaml can override them for a fork.
+	DefaultRegistryRepo = "sezznaw/devkit-registry"
+	DefaultDevkitRepo   = "sezznaw/devkit"
+	FileName            = "config.yaml"
 )
 
 type Config struct {
@@ -98,6 +102,14 @@ func Load() (*Config, error) {
 		if err := yaml.Unmarshal(data, cfg); err != nil {
 			return nil, fmt.Errorf("parse config %s: %w", p, err)
 		}
+	}
+	// The framework's own repositories are fixed for everyone who uses it: a
+	// fresh machine needs no config file before devkit login / pull / update.
+	if cfg.RegistryRepo == "" {
+		cfg.RegistryRepo = DefaultRegistryRepo
+	}
+	if cfg.DevkitRepo == "" {
+		cfg.DevkitRepo = DefaultDevkitRepo
 	}
 	env := map[string]*string{
 		"DEVKIT_GITHUB_HOST":   &cfg.GitHubHost,
