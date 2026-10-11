@@ -325,6 +325,9 @@ func checkGoFile(root, rel string, c goCheck) ([]Finding, error) {
 				out = append(out, Finding{rel, n, p.rule, p.message})
 			}
 		}
+		if bizLiteral.MatchString(code) && !ignored(line, "error-msg") {
+			out = append(out, Finding{rel, n, "error-msg", "the message of a business error is the comment in idl/errors/*.thrift: return errcode.Err(errcode.<Name>) (or errcode.Errf(code, detail) to append a detail), not kerrors.NewBizStatusError with a hand-written string"})
+		}
 		if c.isAPI && strings.HasPrefix(rel, "handler/") && (strings.Contains(code, "c.JSON(") || strings.Contains(code, "c.String(") || strings.Contains(code, "c.AbortWithStatusJSON(")) && !ignored(line, "envelope-write") {
 			out = append(out, Finding{rel, n, "envelope-write", "answer with hertzx.OK(c, &data) / hertzx.Fail(ctx, c, err) / hertzx.FailCode(c, code, msg): they add the {code, msg, data} envelope once, so every endpoint looks the same (hz's generated c.JSON(consts.StatusOK, resp) is the stub to replace)"})
 		}
@@ -443,6 +446,7 @@ func checkIDL(path string, api bool, moneyName *regexp.Regexp) ([]Finding, error
 	lines := strings.Split(string(data), "\n")
 	rel := path
 	var out []Finding
+	isCommonFile := filepath.Base(filepath.Dir(path)) == "common"
 	if api {
 		out = append(out, checkDomainFile(rel, lines)...)
 	}
@@ -467,6 +471,9 @@ func checkIDL(path string, api bool, moneyName *regexp.Regexp) ([]Finding, error
 		if m := fieldRE.FindStringSubmatch(line); m != nil {
 			typ, name := strings.TrimSpace(m[1]), m[2]
 			fields[cur][name] = true
+			if !isCommonFile && (name == "page_size" || name == "total" || (name == "page" && typ != "common.PageReq" && typ != "common.PageInfo")) && !ignored(line, "paging") {
+				out = append(out, Finding{rel, i + 1, "paging", fmt.Sprintf("%s.%s: paging is `common.PageReq page` in a request and `common.PageInfo page` in a response (include \"../common/common.thrift\"; the service applies the defaults with pagex.Normalize), not loose page / page_size / total fields", cur, name)})
+			}
 			if len(shapes) > 0 && shapes[len(shapes)-1].name == cur {
 				fm := fieldFullRE.FindStringSubmatch(line)
 				sh := &shapes[len(shapes)-1]
@@ -564,6 +571,9 @@ func commentBlockHas(lines []string, i int, re *regexp.Regexp) bool {
 	}
 	return false
 }
+
+// bizLiteral: NewBizStatusError(<anything>, "...") with a string literal as the message.
+var bizLiteral = regexp.MustCompile(`NewBizStatusError\([^,]+,\s*"`)
 
 var bizCodeRE = regexp.MustCompile(`NewBizStatusError\(\s*(\d{3,5})\s*,|\bCode\w*\s*=\s*(\d{3,5})\b`)
 

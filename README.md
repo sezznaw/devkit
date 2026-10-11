@@ -197,7 +197,10 @@ with `hertzx.OK` / `hertzx.Fail`, which add the `{code, msg, data}` envelope
 once, and RPC failures are BizStatusErrors) and no raw `c.JSON` in a gateway
 handler (`envelope-write`), one file per gateway domain whose name,
 namespace and route segment agree and which includes only common
-(`domain-file`, `domain-path`, `domain-include`), an RPC handler split by
+(`domain-file`, `domain-path`, `domain-include`), paging as `common.PageReq` / `common.PageInfo`, never loose
+page / page_size / total fields (`paging`), business errors as
+`errcode.Err(code)` with the IDL's message, never a hand-written string
+(`error-msg`), an RPC handler split by
 topic (`handler-split`: handler.go holds struct, New and Ping; at most
 `lint.handler_methods` RPC methods per file, default 8), framework files
 untouched, the common library at the
