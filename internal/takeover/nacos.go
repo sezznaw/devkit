@@ -51,13 +51,27 @@ func NewNacos(localAddr, namespace, username, password string) (*Nacos, error) {
 		constant.WithDisableUseSnapShot(true),
 		constant.WithLogDir(filepath.Join(dir, "log")),
 		constant.WithCacheDir(filepath.Join(dir, "cache")),
-		constant.WithLogLevel("error"),
+		constant.WithLogLevel(firstNonEmpty(os.Getenv("DEVKIT_NACOS_LOG"), "error")),
 	)
 	naming, err := clients.NewNamingClient(vo.NacosClientParam{ClientConfig: cc, ServerConfigs: []constant.ServerConfig{*constant.NewServerConfig(host, port)}})
 	if err != nil {
 		return nil, fmt.Errorf("takeover: nacos client: %w", err)
 	}
-	return &Nacos{naming: naming, namespace: namespace}, nil
+	n := &Nacos{naming: naming, namespace: namespace}
+	// The SDK connects in the background; a call before that fails with
+	// "client not connected, current status:STARTING".
+	deadline := time.Now().Add(15 * time.Second)
+	for {
+		_, err := naming.SelectAllInstances(vo.SelectAllInstancesParam{ServiceName: "devkit-takeover-probe", GroupName: Group})
+		if err == nil || isNoService(err) {
+			return n, nil
+		}
+		if time.Now().After(deadline) {
+			naming.CloseClient()
+			return nil, fmt.Errorf("takeover: nacos at %s not ready: %w", localAddr, err)
+		}
+		time.Sleep(500 * time.Millisecond)
+	}
 }
 
 // Register announces the takeover instance.
@@ -157,4 +171,13 @@ func LocalIPs() []string {
 		}
 	}
 	return out
+}
+
+func firstNonEmpty(vals ...string) string {
+	for _, v := range vals {
+		if v != "" {
+			return v
+		}
+	}
+	return ""
 }

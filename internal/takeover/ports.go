@@ -65,12 +65,20 @@ func Plan(env *Env, taken func(port int) bool) (*Layout, error) {
 		if !hasPort(ep.Ports, nacosPort) {
 			continue
 		}
-		main := pick(nacosPort + 10000)
-		grpc := nacosPort + nacosGRPCOffset
-		if used[main+nacosGRPCOffset] || taken(main+nacosGRPCOffset) {
-			return nil, fmt.Errorf("takeover: local ports %d and %d are needed for Nacos (the SDK finds gRPC at the main port + 1000) and one is taken", main, main+nacosGRPCOffset)
+		// Both ports of a pair must be free (a second tool on this machine
+		// holds the first pair).
+		main := 0
+		for p := nacosPort + 10000; p < nacosPort+10000+500; p++ {
+			if !used[p] && !taken(p) && !used[p+nacosGRPCOffset] && !taken(p+nacosGRPCOffset) {
+				main = p
+				break
+			}
 		}
-		used[main+nacosGRPCOffset] = true
+		if main == 0 {
+			return nil, fmt.Errorf("takeover: no free pair of local ports for Nacos (main and main+1000, from %d up)", nacosPort+10000)
+		}
+		grpc := nacosPort + nacosGRPCOffset
+		used[main], used[main+nacosGRPCOffset] = true, true
 		l.addInfra(ep, nacosPort, main)
 		l.addInfra(ep, grpc, main+nacosGRPCOffset)
 		l.NacosAddr = fmt.Sprintf("127.0.0.1:%d", main)

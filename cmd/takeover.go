@@ -254,8 +254,8 @@ func locateService(args []string) (name, dir string, port int, err error) {
 }
 
 func init() {
-	takeoverCmd.Flags().StringVar(&takeoverFlags.tag, "tag", "", "your tag (default: devkit auth's GitLab user name)")
-	takeoverCmd.Flags().StringVar(&takeoverFlags.ssh, "ssh", "", "ssh target of the node, takeover@host (default: devkit.yaml takeover_ssh)")
+	takeoverCmd.PersistentFlags().StringVar(&takeoverFlags.tag, "tag", "", "your tag (default: devkit auth's GitLab user name)")
+	takeoverCmd.PersistentFlags().StringVar(&takeoverFlags.ssh, "ssh", "", "ssh target of the node, takeover@host or an alias of ~/.ssh/config (default: devkit.yaml takeover_ssh)")
 	takeoverCmd.Flags().IntVar(&takeoverFlags.port, "port", 0, "the local service's port (default: conf/local.yaml service.addr)")
 	takeoverCmd.Flags().BoolVar(&takeoverFlags.force, "force", false, "take over although someone else holds the same tag")
 	takeoverEnvCmd.Flags().StringVar(&takeoverEnvFlags.kubeconfig, "kubeconfig", "", "read-only kubeconfig")

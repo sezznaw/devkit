@@ -37,6 +37,10 @@ const errRemotePortTaken = "remote port forwarding failed"
 // Open starts the connection and waits until it answers; it returns an error
 // naming the ssh output when it does not. ok=false with a nil error means
 // the remote port was taken (try another).
+//
+// target may be an alias of ~/.ssh/config, but one without LocalForward /
+// RemoteForward lines of its own: ExitOnForwardFailure makes any forward
+// that cannot be set up fatal, and ClearAllForwardings would drop ours too.
 func Open(ctx context.Context, target string, forwards []Forward, rev Reverse) (t *Tunnel, taken bool, err error) {
 	sock := filepath.Join(os.TempDir(), fmt.Sprintf("devkit-takeover-%d.sock", os.Getpid()))
 	os.Remove(sock)
@@ -125,7 +129,7 @@ func (t *Tunnel) Close() {
 // FetchEnv runs the node side: `ssh target <service>`; the ForceCommand of
 // the takeover account answers with Env and ignores anything else.
 func FetchEnv(ctx context.Context, target, service string) (*Env, error) {
-	cmd := exec.CommandContext(ctx, "ssh", "-o", "BatchMode=yes", "-o", "StrictHostKeyChecking=accept-new", target, service)
+	cmd := exec.CommandContext(ctx, "ssh", "-o", "BatchMode=yes", "-o", "StrictHostKeyChecking=accept-new", "-o", "ClearAllForwardings=yes", target, service) // env fetch: no forwards wanted
 	var stderr bytes.Buffer
 	cmd.Stderr = &stderr
 	out, err := cmd.Output()
@@ -138,6 +142,11 @@ func FetchEnv(ctx context.Context, target, service string) (*Env, error) {
 	}
 	if env.Version != 1 {
 		return nil, fmt.Errorf("takeover: node side speaks version %d, this devkit expects 1; update devkit on one side", env.Version)
+	}
+	for _, k := range []string{"NACOS_NAMESPACE", "NACOS_USERNAME", "NACOS_PASSWORD"} {
+		if env.EnvVars[k] == "" {
+			return nil, fmt.Errorf("takeover: the node side did not return %s (its --secret / deployments give it); check the ForceCommand flags and RBAC on the node", k)
+		}
 	}
 	return &env, nil
 }

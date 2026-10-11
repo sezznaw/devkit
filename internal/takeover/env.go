@@ -170,9 +170,15 @@ func Collect(o CollectOptions) (*Env, error) {
 			env.EnvVars[key] = v
 		}
 	}
-	if o.Service != "" {
-		var dep struct {
-			Spec struct {
+	// The plain environment variables of a deployment (NACOS_ADDR,
+	// NACOS_NAMESPACE, the OTLP endpoint, TENANT_CODE) describe the
+	// environment, not one service. The service asked for comes first; when
+	// none is named, or it has none, the first deployment that carries
+	// NACOS_ADDR (a backend) provides them.
+	var deps struct {
+		Items []struct {
+			Metadata struct{ Name string } `json:"metadata"`
+			Spec     struct {
 				Template struct {
 					Spec struct {
 						Containers []struct {
@@ -184,17 +190,42 @@ func Collect(o CollectOptions) (*Env, error) {
 					} `json:"spec"`
 				} `json:"template"`
 			} `json:"spec"`
-		}
-		if err := k.get(&dep, "deployment", o.Service, "-n", o.Namespace); err != nil {
-			return nil, fmt.Errorf("takeover env: %w (is %q a service of this environment?)", err, o.Service)
-		}
-		for _, c := range dep.Spec.Template.Spec.Containers {
-			for _, e := range c.Env {
-				if e.Value != "" {
-					env.EnvVars[e.Name] = e.Value
+		} `json:"items"`
+	}
+	if err := k.get(&deps, "deployments", "-n", o.Namespace); err != nil {
+		return nil, err
+	}
+	plain := func(name string) map[string]string {
+		for _, d := range deps.Items {
+			if d.Metadata.Name != name {
+				continue
+			}
+			out := map[string]string{}
+			for _, c := range d.Spec.Template.Spec.Containers {
+				for _, e := range c.Env {
+					if e.Value != "" {
+						out[e.Name] = e.Value
+					}
 				}
 			}
+			return out
 		}
+		return nil
+	}
+	chosen := plain(o.Service)
+	if chosen["NACOS_ADDR"] == "" {
+		for _, d := range deps.Items {
+			if p := plain(d.Metadata.Name); p["NACOS_ADDR"] != "" {
+				chosen = p
+				break
+			}
+		}
+	}
+	if o.Service != "" && plain(o.Service) == nil {
+		return nil, fmt.Errorf("takeover env: no deployment %q in %s (is it a service of this environment?)", o.Service, o.Namespace)
+	}
+	for k, v := range chosen {
+		env.EnvVars[k] = v
 	}
 	sort.Slice(env.Services, func(i, j int) bool { return env.Services[i].Name < env.Services[j].Name })
 	sort.Slice(env.Infra, func(i, j int) bool {

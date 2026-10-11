@@ -69,10 +69,16 @@ func TestPlan(t *testing.T) {
 	}
 }
 
-func TestPlanRefusesWhenNacosGRPCPortTaken(t *testing.T) {
-	_, err := Plan(sampleEnv(), func(p int) bool { return p == 19848 })
-	if err == nil || !strings.Contains(err.Error(), "1000") {
-		t.Errorf("want the nacos port error, got %v", err)
+func TestPlanMovesNacosPairWhenOneIsTaken(t *testing.T) {
+	l, err := Plan(sampleEnv(), func(p int) bool { return p == 18848 || p == 19849 })
+	if err != nil {
+		t.Fatal(err)
+	}
+	if l.NacosAddr != "127.0.0.1:18850" || l.Rewrite["nacos.sportsbook-dev-infra:9848"] != "127.0.0.1:19850" {
+		t.Errorf("pair: %s / %s", l.NacosAddr, l.Rewrite["nacos.sportsbook-dev-infra:9848"])
+	}
+	if _, err := Plan(sampleEnv(), func(p int) bool { return true }); err == nil || !strings.Contains(err.Error(), "pair") {
+		t.Errorf("all taken: %v", err)
 	}
 }
 
