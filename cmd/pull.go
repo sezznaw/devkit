@@ -242,6 +242,7 @@ func ensureProjectConfig(dir, host string, projects []gitlab.Project) error {
 		cfg.ModulePrefix = shared.ModulePrefix
 		cfg.Vars = shared.Vars
 		cfg.GoPrivate = shared.GoPrivate
+		cfg.TakeoverSSH = shared.TakeoverSSH
 	}
 	if cfg.ModulePrefix == "" {
 		cfg.ModulePrefix = filepath.Base(dir)

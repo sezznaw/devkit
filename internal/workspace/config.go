@@ -38,6 +38,10 @@ type Config struct {
 	Component string `yaml:"component,omitempty"`
 	// Vars are default template variables for `ngs` (e.g. NacosAddr).
 	Vars map[string]string `yaml:"vars,omitempty"`
+	// TakeoverSSH is the ssh target of the development environment's node
+	// for `devkit takeover` ("takeover@10.0.0.5"). Comes from the IDL
+	// repository's devkit.yaml `project:` block. [takeover]
+	TakeoverSSH string `yaml:"takeover_ssh,omitempty"`
 }
 
 // Find walks up from dir looking for devkit.yaml and returns the directory

@@ -74,6 +74,8 @@ type SharedProject struct {
 	ModulePrefix string            `yaml:"module_prefix"`
 	GoPrivate    bool              `yaml:"go_private"`
 	Vars         map[string]string `yaml:"vars"`
+	// TakeoverSSH is the ssh target `devkit takeover` connects to. [takeover]
+	TakeoverSSH string `yaml:"takeover_ssh"`
 }
 
 // LoadSharedProject reads the `project:` block of <idlDir>/devkit.yaml; nil
