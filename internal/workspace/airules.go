@@ -14,9 +14,9 @@ const AIRulesSource = "idl/AGENTS.md"
 // aiPointer is the text of every pointer file: it only sends the tool to
 // the source. Content lives in one place; these files never carry rules.
 const aiPointer = `先完整阅读 idl/AGENTS.md，再开始任何任务。它是本项目唯一的开发流程说明，所有 AI 工具共用。
-idl/skills/ 下每个目录是一种任务的分步做法（SKILL.md）；做那种任务前先读它（装了 skill 的工具会自动加载）。
+.agents/skills/ 下每个目录是一种任务的分步做法（SKILL.md，devkit ai 装的）；做那种任务前先读它（装了 skill 的工具会自动加载）。
 Read idl/AGENTS.md in full before starting any task. It is the project's only development guide, shared by every AI tool.
-Each directory under idl/skills/ holds the steps of one kind of task (SKILL.md); read it before doing that task (tools with skill support load it themselves).
+Each directory under .agents/skills/ holds the steps of one kind of task (SKILL.md, installed by devkit ai); read it before doing that task (tools with skill support load it themselves).
 `
 
 // legacyPointer is the text devkit wrote before skills existed; a file with

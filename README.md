@@ -204,13 +204,18 @@ is in use. Start the AI in the project directory, not inside a service, so
 it sees the IDL, the services and the infrastructure together. A tool
 without a pointer reads the guide when told to.
 
-The guide holds the rules; the step-by-step procedures of the recurring
-tasks are **skills**: `idl/skills/<name>/SKILL.md` (frontmatter `name`,
-`description`, then the steps; the open Agent Skills format). `devkit ai
-<tool>` copies them to `.agents/skills/` (Codex, Copilot, Cursor, Gemini
-CLI, Windsurf) and `.claude/skills/` (Claude Code), where the tools load a
-skill when its task comes up; `devkit pull` refreshes the copies, `devkit
-ai --clean` removes them. Edit the source in idl, never the copies.
+The guide holds the project's rules; the step-by-step procedures of the
+recurring tasks are **skills** (the open Agent Skills format: a directory
+with a SKILL.md, frontmatter `name` and `description`, then the steps).
+devkit ships the framework's: `devkit-rpc-method`, `devkit-gateway-api`,
+`devkit-gateway-domain` and `devkit-finish`, the same in every project and
+versioned with the framework they describe. A project adds its own under
+`idl/skills/<name>/SKILL.md` (one with a built-in's name replaces it).
+`devkit ai <tool>` copies both to `.agents/skills/` (Codex, Copilot,
+Cursor, Gemini CLI, Windsurf) and `.claude/skills/` (Claude Code), where
+the tools load a skill when its task comes up; `devkit pull` refreshes the
+copies, `devkit ai --clean` removes them. Edit the sources, never the
+copies.
 
 `devkit report` is the finishing step: it collects the facts of a piece of
 work from git and the build across every repository of the project

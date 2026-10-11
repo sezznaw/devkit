@@ -4,6 +4,8 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/sezznaw/devkit/internal/skills"
 )
 
 func TestSyncAISkillsCopiesRefreshesAndCleans(t *testing.T) {
@@ -23,8 +25,12 @@ func TestSyncAISkillsCopiesRefreshesAndCleans(t *testing.T) {
 	if err != nil || len(r) != 0 {
 		t.Fatalf("sync: %v %v", w, err)
 	}
-	if len(w) != 2 {
-		t.Fatalf("written %v, want both targets", w)
+	builtins := len(skills.Names())
+	if len(w) != 2*(builtins+1) {
+		t.Fatalf("written %v, want %d built-ins + demo-task in both targets", w, builtins)
+	}
+	if _, err := os.Stat(filepath.Join(dir, ".claude", "skills", "devkit-finish", "SKILL.md")); err != nil {
+		t.Error("built-in skill not installed")
 	}
 	for _, tg := range AISkillTargets {
 		b, err := os.ReadFile(filepath.Join(dir, tg, "demo-task", "SKILL.md"))
@@ -48,7 +54,7 @@ func TestSyncAISkillsCopiesRefreshesAndCleans(t *testing.T) {
 		t.Errorf("removed %v", r)
 	}
 	removed, err := CleanAISkills(dir)
-	if err != nil || len(removed) != 2 {
+	if err != nil || len(removed) != 2*(builtins+1) {
 		t.Fatalf("clean: %v %v", removed, err)
 	}
 	if _, err := os.Stat(filepath.Join(own, "SKILL.md")); err != nil {

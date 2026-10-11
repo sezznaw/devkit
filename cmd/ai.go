@@ -29,10 +29,13 @@ holds only what is in use.
   devkit ai --all           every tool
   devkit ai --clean         remove the pointers devkit wrote (edited files are kept)
 
-The project's skills (idl/skills/<name>/SKILL.md: the steps of one kind of
-task, loaded by the tool when that task comes up) are copied to
-.agents/skills/ and .claude/skills/ at the same time; devkit pull refreshes
-the copies when idl changes. Edit the source in idl, not the copies.
+Skills (the steps of one kind of task, loaded by the tool when that task
+comes up) are copied to .agents/skills/ and .claude/skills/ at the same
+time: devkit's built-in ones (devkit-rpc-method, devkit-gateway-api,
+devkit-gateway-domain, devkit-finish: the framework's way, same in every
+project) and the project's own under idl/skills/<name>/SKILL.md (a project
+skill with a built-in's name replaces it). devkit pull refreshes the copies.
+Edit the sources, not the copies.
 
 A tool not listed reads the guide when told to: "先读 idl/AGENTS.md".`,
 	RunE: func(cmd *cobra.Command, args []string) error {
@@ -75,8 +78,9 @@ A tool not listed reads the guide when told to: "先读 idl/AGENTS.md".`,
 				fmt.Printf("%-10s %-36s %s%s\n", f.Key, f.Path, f.Tools, mark)
 			}
 			fmt.Printf("\n%s is the guide; `devkit ai <tool>` writes the pointer for your tool.\n", workspace.AIRulesSource)
-			if skills := workspace.ListAISkills(dir); len(skills) > 0 {
-				fmt.Printf("skills in %s: %s (copied to %s by `devkit ai <tool>`)\n", workspace.AISkillsSource, strings.Join(skills, ", "), strings.Join(workspace.AISkillTargets, " and "))
+			fmt.Printf("\nskills (copied to %s by `devkit ai <tool>`):\n", strings.Join(workspace.AISkillTargets, " and "))
+			for _, sk := range workspace.ListAISkills(dir) {
+				fmt.Printf("  %-26s %s\n", sk.Name, sk.Source)
 			}
 			return nil
 		}

@@ -140,9 +140,10 @@ gemini、windsurf、junie、kiro、trae、cline、roo、augment、continue、lin
 的工具用 `agents`）；`--all` 全写，`--clean` 删掉 devkit 写过的。不主动写任何文件，项目目录里只有正在用的。
 在项目目录启动 AI，不要进到某个服务里，这样它同时看得到 IDL、各服务和部署。没有指针文件的工具，开始时告诉它读这个文件。
 
-AGENTS.md 放规矩；常做的几种任务的**分步做法**是 skill：`idl/skills/<名字>/SKILL.md`（开头 `name`、`description`，正文是步骤；开放的
-Agent Skills 格式）。`devkit ai <工具>` 把它们复制到 `.agents/skills/`（Codex、Copilot、Cursor、Gemini CLI、Windsurf 读这里）和
-`.claude/skills/`（Claude Code 读这里），工具在做那种任务时自动加载；`devkit pull` 刷新副本，`devkit ai --clean` 删掉。改 idl 里的源文件，不改副本。
+AGENTS.md 放项目的规矩；常做的几种任务的**分步做法**是 skill（开放的 Agent Skills 格式：一个目录一个 `SKILL.md`，开头 `name`、`description`，正文是步骤）。
+框架的四个随 devkit 自带：`devkit-rpc-method`、`devkit-gateway-api`、`devkit-gateway-domain`、`devkit-finish`，所有项目一样，和它们描述的框架同一个版本；
+项目自己的放 `idl/skills/<名字>/SKILL.md`（和自带同名的覆盖它）。`devkit ai <工具>` 把两者一起复制到 `.agents/skills/`（Codex、Copilot、Cursor、Gemini CLI、Windsurf 读这里）和
+`.claude/skills/`（Claude Code 读这里），工具在做那种任务时自动加载；`devkit pull` 刷新副本，`devkit ai --clean` 删掉。改源文件，不改副本。
 
 `devkit report` 是收尾那一步：在项目目录里跑，从 git 和构建里取出这次工作的事实——改了哪些仓库、提交和是否已推送、改了哪些文件（改到框架文件会标出）、
 IDL 新增的方法 / 结构体 / 错误码、`make lint` / `make test` 结果、`app/verify.go`（部署后检查）有没有改——输出一份 Markdown 汇报，
