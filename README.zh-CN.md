@@ -21,7 +21,7 @@ mkdir -p ~/work/shop && cd ~/work/shop
 devkit ngs order
 ```
 
-不需要任何配置。什么都不设置时，服务的 Go module 是 `shop/order`（目录名 + 服务名），项目共用的 IDL 放在本地 git 仓库 `./idl` 里。公共库固定是 `sezznaw/devkit-common`，会 clone 一份到 `./common` 供阅读。
+不需要任何配置。什么都不设置时，服务的 Go module 是 `shop/order`（目录名 + 服务名），项目共用的 IDL 放在本地 git 仓库 `./idl` 里。公共库固定是 `sezznaw/devkit-common`，会 clone 一份到 `./kit-common` 供阅读。
 
 ```
 devkit ngs order
@@ -85,19 +85,26 @@ idl_repo: "git@gitlab.yourcompany.com:shop/idl.git"     # 或 GitHub 上的 owne
 ```
 ~/work/shop/
   devkit.yaml               可选的项目设置
-  go.work                   让 Go 工具和 IDE 使用 ./kit-common 和你们自己的 ./common（只存在于本机）
+  go.work                   让 Go 工具和 IDE 使用 ./kit-common 和你们自己的 ./lib（只存在于本机）
   idl/                      IDL 仓库的 clone；已替你加好 order/order.thrift
-  kit-common/                团队当前版本的共享库；"跳转到定义"会落在这里
+  kit-common/                团队当前版本的共享库；"跳转到定义"会落在这里；只读
+  lib/                      可选：你们自己的共用纯 Go 模块，列在 go.work 里，打 tag 发版
   order/
     cmd/order/main.go       框架入口；由 devkit update 替换，不要修改
     app/app.go              归你：本服务的 Config、依赖的创建和退出清理
-    handler/handler.go      归你：RPC 的实现
+    handler/handler.go      归你：服务结构体、New、Ping；RPC 方法写在 handler/<主题>.go
+    handler/codes.go        归你：只有本服务用的常量（业务错误码来自 IDL 的 errors/）
+    repo/repo.go            归你：数据库访问，一张表一个文件
+    app/jobs.go             归你：定时任务（名字、cron、超时、函数）
+    app/verify.go           归你：--verify 跑的部署后检查
     conf/local.yaml         你自己的电脑（不设置 APP_ENV）：注册到本机的 Nacos；每个配置项都有说明
     conf/dev.yaml           公共开发服务器；地址和密码来自 ${环境变量}
     conf/uat.yaml           验收测试环境
     conf/prod.yaml          生产配置，密钥来自 ${环境变量}
     conf/README.md          全部配置项的参考文档，由 devkit 保持最新
-    kitex_gen/              生成的代码，已被 git 忽略
+    kitex_gen/              生成的代码，已被 git 忽略，只读
+    idl.lock                代码是按哪个 IDL 提交生成的；make gen 写
+    .devkit/manifest.json   devkit 记录它管理的文件
     idl.mk                  本服务要为哪些 IDL 生成代码（归你编辑）
     Makefile                tools / gen / build / run / test / docker
     .gitlab-ci.yml            以及/或者 .github/workflows/ci.yml：clone IDL 仓库、
@@ -105,11 +112,11 @@ idl_repo: "git@gitlab.yourcompany.com:shop/idl.git"     # 或 GitHub 上的 owne
     Dockerfile
 ```
 
-**common 库是你项目的一部分。** `ngs` 和 `devkit update` 会让 `common/` 始终检出团队当前发布的版本，并在旁边维护一个 `go.work`，其中列出 `common/` 和每个服务。Go 工具和 IDE 因此会把 `github.com/sezznaw/devkit-common` 解析到这个目录，"跳转到定义"打开的是你项目里的代码，而不是只读的模块缓存。由于 `common/` 里正好是你的服务锁定的那个发布版本，你本地编出来的和 CI 编出来的完全一致；`go.work` 只存在于你的机器上，CI 和 Docker 构建都看不到它。如果你的 IDE 只打开了单个服务而没有识别到它，请改为打开项目目录。
+**kit-common 库是你项目的一部分。** `ngs` 和 `devkit update` 会让 `kit-common/` 始终检出团队当前发布的版本，并在旁边维护一个 `go.work`，其中列出 `kit-common/` 和每个服务。Go 工具和 IDE 因此会把 `github.com/sezznaw/devkit-common` 解析到这个目录，"跳转到定义"打开的是你项目里的代码，而不是只读的模块缓存。由于 `kit-common/` 里正好是你的服务锁定的那个发布版本，你本地编出来的和 CI 编出来的完全一致；`go.work` 只存在于你的机器上，CI 和 Docker 构建都看不到它。如果你的 IDE 只打开了单个服务而没有识别到它，请改为打开项目目录。
 
 目录叫 `kit-common/`，是因为项目通常有自己的 `common`，那个名字留给你。用旧版 devkit 创建的项目，共享库检出在 `common/` 里：下一次 `devkit update`（或 `ngs` / `nas`）会把它连同里面的全部内容改名为 `kit-common/`，并重写 `go.work`。不是共享库检出的 `common/` 永远不会被碰。
 
-你们自己的 `common/` 只要是一个 Go 模块（里面有 `go.mod`），也会被写进 `go.work`：引用它的服务直接按这个目录编译，“跳转到定义”也落在这里。`go.work` 由 `ngs`、`nas` 和 `update` 重写，所以新建 `common/` 之后执行一次 `devkit update`；手动加进去的行会在下次重写时丢失。和 `go.work` 里的其他内容一样，这只对你的电脑生效：CI 编译服务时用的是该服务 `go.mod` 里要求的 `common` 版本。
+你们自己的共用 Go 代码放在项目目录下的 `lib/` 模块（有 `lib/go.mod`）：每个服务都可以 import 的纯函数（赔率换算、结算规则），打 git tag 发版，各服务在 `go.mod` 里按版本引用。只要 `lib/go.mod` 存在，`ngs`、`nas` 和 `update` 也会把 `./lib` 写进 `go.work`：引用它的服务直接按这个目录编译，"跳转到定义"也落在这里；新建 `lib/` 之后执行一次 `devkit update`，手动加进去的行会在下次重写时丢失。和 `go.work` 里的其他内容一样，这只对你的电脑生效：CI 编译服务时用的是该服务 `go.mod` 里要求的 `lib` 版本。`lib` 放在私有 GitLab 上时，每台电脑要 `go env -w GOPRIVATE=<GitLab 域名>` 并在 `~/.netrc` 加一行只读 token；CI 模板用 job token 自己写 netrc。（旧项目的 `common/` 模块存在时仍会被列出；新项目用 `lib/`。）
 
 不要修改 `kit-common/`：那里的改动只影响你本机的编译结果。devkit 不会丢弃这类改动，但 `update` 和 `update --check` 会明确提示。对库的修改应当提交到它自己的仓库，通过发布新版本到达所有人。`GOWORK=off go build ./...` 可以按 CI 的方式编译。
 
@@ -136,10 +143,18 @@ gemini、windsurf、junie、kiro、trae、cline、roo、augment、continue、lin
 ### Lint：团队规矩的机器检查
 
 `devkit lint`（`make lint` 在本机和 CI 里都会跑）按团队规矩检查服务，不管代码是谁写的。通用规则所有项目一样：不许自己连中间件
-（要用 `rt.DB`、`rt.Redis`、`rt.Kafka`、`rt.S3`、`rt.Provider`）、金额不许浮点（amount、balance、price、fee……）、写方法要有
-`request_id`、IDL 方法要有注释、框架文件不许改、日志走 zlog、`idl.lock` 要新。项目自己的规则写在 IDL 仓库的 `devkit.yaml`
-（本机和 CI 读同一份）：`lint.vendor_service`（调第三方只能在它）、`lint.money_words`（追加金额字段词）、`lint.errors_file`
-（错误码必须登记的表）、`lint.disable`。每条输出都写了该怎么改；有问题退出码 1，CI 停下。某一行确属误报可加 `//devkit:lint-ignore <规则>`。`idl-lock` 规则堵住分仓库的"先推 IDL"陷阱：`make gen` 写 `idl.lock`，
+（要用 `rt.DB`、`rt.Redis`、`rt.Kafka`、`rt.S3`、`rt.Provider`；`no-direct-middleware`）、金额字段必须是 `common.Money`、比例必须是 `common.Decimal`、一律不许浮点
+（`money-type`、`rate-type`、`no-float-money`）、写方法要有 `request_id`、IDL 方法要有注释（`method-comment`）、登录、注册、改密码、验证码类接口要标 `// @limit`（`limit`）、
+事务里的事件走 `PublishTx`（`outbox`）、不用 `time.AfterFunc` 做延后的事（`delay`，用 `rt.Delay`）、Redis 锁用 `redisx.WithLock` 不自己 `SetNX`（`lock`）、
+handler 和 repo 里不放 `sync.Mutex`（`mutex`，只锁得住一个副本）、用 `hertzx.Bind` 不用 `c.BindAndValidate`（`bind`）、handler 包至少有一个测试（`tests`）、
+任何返回结构体里不得有 `code`/`msg`（`no-envelope`：方法返回数据结构体，网关 handler 以 `hertzx.OK` / `hertzx.Fail` 结束，壳由框架加一次，RPC 失败是 BizStatusError）、
+网关 handler 不直接 `c.JSON`（`envelope-write`）、网关一个领域一个文件，文件名、namespace、路径段三者一致且只 include common（`domain-file`、`domain-path`、`domain-include`）、
+分页用 `common.PageReq` / `common.PageInfo`，不许裸的 page / page_size / total 字段（`paging`）、业务错误写 `errcode.Err(code)`，不手写消息字符串（`error-msg`）、
+RPC handler 按主题分文件（`handler-split`：handler.go 只放结构体、New、Ping；一个文件最多 `lint.handler_methods` 个 RPC 方法，默认 8）、框架文件不许改（`framework-file`）、
+go.mod 里公共库的版本等于模板定的版本（`common-version`）、项目的 `kit-common/` 检出必须干净（`common-checkout`：go.work 让本机编译用的就是它）、日志走 zlog（`use-zlog`）、`idl.lock` 要新（`idl-lock`）。
+项目自己的规则写在 IDL 仓库的 `devkit.yaml`（本机和 CI 读同一份）：`lint.vendor_service`（调第三方只能在它：`vendor-only`）、`lint.report_service`（只有它能开报表库：`report-only`）、
+`lint.money_words`（追加金额字段词）、`lint.errors_dir` + `lint.error_ranges`（错误码只在 Thrift 文件里按领域声明一次，每个码一行说明、落在本领域的号段内，代码里用生成的 `errcode` 常量：
+`error-code`、`error-dup`、`error-range`、`error-comment`）、`lint.handler_methods`、`lint.disable`。每条输出都写了该怎么改；有问题退出码 1，CI 停下。某一行确属误报可加 `//devkit:lint-ignore <规则>`。`idl-lock` 规则堵住分仓库的"先推 IDL"陷阱：`make gen` 写 `idl.lock`，
 CI 按这个 IDL 提交构建，锁落后于检出或该提交还没推到服务器时，本机 lint 就报错。
 服务不在项目目录里时（CI）用 `--idl` 指定 IDL 检出。
 
@@ -180,8 +195,11 @@ echo 'source "$HOME/.devkit/env"' >> ~/.zshrc    # 或 ~/.bashrc
 |------|-----------|
 | `devkit ngs <服务名>` | 在当前项目目录下创建 RPC 服务（Kitex） |
 | `devkit nas <服务名>` | 在当前项目目录下创建 API 服务（HTTP，Hertz） |
-| `devkit update` | 把 devkit 管理的文件（Makefile、CI、Dockerfile、`main.go`）升级到最新模板。在服务目录内执行只更新该服务；在项目目录下执行则更新全部服务。`--check` 只显示版本和本地改动 |
+| `devkit update` | 把 devkit 管理的文件（Makefile、CI、Dockerfile、`main.go`、`conf/README*.md`）升级到最新模板。在服务目录内执行只更新该服务；在项目目录下执行则更新全部服务。`--check` 只显示版本和本地改动 |
 | `devkit self-update` | 升级 devkit 自身。`--check` 只报告 |
+| `devkit lint` | 按团队规矩检查服务（`make lint` 跑的就是它），见上文 |
+| `devkit hooks` | 装 git pre-push 钩子：每次推送前跑 `make lint && make test`（和 CI 的 test 阶段一样；`--remove` 卸掉，`git push --no-verify` 跳过一次）。`ngs` 和 `update` 也会装 |
+| `devkit lock` | 把框架文件和生成物设为只读，编辑器会提示（`ngs`、`update`、`make gen` 都会做；`--unlock` 恢复，`--list` 列出文件，`-q` 是 Makefile 传的）。项目的 `kit-common/` 检出也一起锁。只是提醒：lint、钩子和 CI 仍然说了算 |
 | `devkit doctor` | 对照团队版本查看 git、Go、kitex、thriftgo、hz 的状态。`--fix` 安装缺失的工具，并替换版本不对的生成器 |
 | `devkit version` | 报问题时提供版本信息 |
 
@@ -239,7 +257,7 @@ your own files are never rewritten; you may want to:
 
 ### `update` 如何处理你的文件
 
-归你所有的文件（`go.mod`、`idl.mk`、`app/*`、`conf/*.yaml`、`handler/*`、`README.md`）只创建一次，之后永远不会被碰。对于 devkit 管理的文件：
+归你所有的文件（`go.mod`、`idl.mk`、`app/*`、`conf/*.yaml`、`handler/*`、`repo/*`、`deps/*`、`README.md`）只创建一次，之后永远不会被碰；`idl.lock` 由 `make gen` 写，`update` 不碰。对于 devkit 管理的文件：
 
 | 你的文件 | `devkit update` | 加 `--force` |
 |---------|-----------------|--------------|
@@ -247,6 +265,10 @@ your own files are never rewritten; you may want to:
 | 被你修改过 | 保持不动，新版本写到旁边的 `<文件>.new` | 替换，你的版本保留为 `<文件>.bak` |
 | 被你删除 | 恢复 | 相同 |
 | 模板里已不再包含 | 未改动则删除，改过则保留 | 改过的保留为 `.bak` |
+
+### 不会被你误改的文件
+
+在编辑器里打开 Makefile、`cmd/<服务>/main.go`、`kitex_gen/`、`hertz_gen/`、`.idl/` 下的任何文件、hz 生成的 `router/` 文件（`middleware.go` 除外）、`.hz`、`.devkit/manifest.json`、OpenAPI 文档或 `idl.lock`，它会提示**只读**，和 Go 模块缓存里的库一样。这是 `devkit lock` 做的：devkit 写的（`update` 会替换的）文件加上生成器写的一切都去掉了写权限。你自己的代码（`app/`、`handler/`、`repo/`、`conf/*.yaml`、`deps/`、`go.mod`）照常可写。`ngs`、`update` 和 `make gen` 结束时锁上；`make gen` 开始前先解锁，生成器才能覆盖。它是提醒不是墙：`devkit lint` 的 framework-file 规则、pre-push 钩子和 CI 仍然说了算。项目的 `kit-common/` 检出也被锁住：本机每次编译用的就是它（go.work），要改库请去库自己的仓库。`devkit lock --unlock` 恢复可写，`--list` 列出集合。Git 不保存权限位，新 clone 在第一次 `make gen` 时锁上。
 
 ## 常见问题
 
@@ -270,7 +292,7 @@ registry 仓库是私有的或配置不对。执行 `devkit config set github_to
 
 ## 维护者须知
 
-**仓库。** `devkit`（本 CLI）、`devkit-registry`（`kitex-service` 模板，格式见 [docs/registry.md](docs/registry.md)）、`devkit-common`（每个服务都会 import 的共享 Go 库），以及每个项目一个 IDL 仓库。
+**仓库。** `devkit`（本 CLI）、`devkit-registry`（`kitex-service` 和 `hertz-service` 两个模板，格式见 [docs/registry.md](docs/registry.md)）、`devkit-common`（每个服务都会 import 的共享 Go 库，在每个项目里检出为 `kit-common/`），以及每个项目一个 IDL 仓库。
 
 **全局配置** 在 `~/.devkit/config.yaml`，由 `install.sh` 写入。隐藏命令 `devkit config show|set` 可以编辑它；每个键也都有对应的环境变量。
 

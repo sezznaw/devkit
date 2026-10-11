@@ -27,7 +27,7 @@ devkit ngs order
 No configuration is needed. With nothing set, the service's Go module is
 `shop/order` (directory name + service name), the project's shared IDL lives
 in a local git repository `./idl`. The common library is always
-`sezznaw/devkit-common`; a copy is cloned to `./common` for reading.
+`sezznaw/devkit-common`; a copy is cloned to `./kit-common` for reading.
 
 ```
 devkit ngs order
@@ -97,19 +97,26 @@ then put `<url>` into `idl_repo` so teammates get the same IDLs. The shared
 ```
 ~/work/shop/
   devkit.yaml               optional project settings
-  go.work                   makes the Go tools and your IDE use ./kit-common and your own ./common (this machine only)
+  go.work                   makes the Go tools and your IDE use ./kit-common and your own ./lib (this machine only)
   idl/                      clone of the IDL repository; order/order.thrift was added for you
-  kit-common/                the shared library at the team's version; "go to definition" lands here
+  kit-common/                the shared library at the team's version; "go to definition" lands here; read-only
+  lib/                      optional: your own shared pure-Go module, listed in go.work, released by tag
   order/
     cmd/order/main.go       framework entry point; replaced by devkit update, never edit it
     app/app.go              yours: the service's Config, its dependencies and shutdown cleanup
-    handler/handler.go      yours: the RPC implementations
+    handler/handler.go      yours: the service struct, New and Ping; RPC methods go in handler/<topic>.go
+    handler/codes.go        yours: constants the service alone uses (business codes come from the IDL's errors/)
+    repo/repo.go            yours: database access, one file per table
+    app/jobs.go             yours: scheduled jobs (name, cron, timeout, function)
+    app/verify.go           yours: post-deploy checks run by --verify
     conf/local.yaml         your own machine (no APP_ENV): registers in the Nacos on it; every setting explained
     conf/dev.yaml           the shared development server; addresses and secrets from ${ENV_VARS}
     conf/uat.yaml           user acceptance test
     conf/prod.yaml          production
     conf/README.md          reference of all settings, kept up to date by devkit
-    kitex_gen/              generated code, git-ignored
+    kitex_gen/              generated code, git-ignored, read-only
+    idl.lock                which IDL commit the code was generated from; written by make gen
+    .devkit/manifest.json   devkit's record of the files it manages
     idl.mk                  which IDLs this service generates code for (yours to edit)
     Makefile                tools / gen / build / run / test / docker
     .gitlab-ci.yml            and/or .github/workflows/ci.yml: clone the IDL repo,
@@ -134,13 +141,18 @@ checkout in `common/`: the next `devkit update` (or `ngs` / `nas`) renames it
 to `kit-common/`, with everything in it, and rewrites `go.work`. A `common/`
 that is anything else is never touched.
 
-Your own `common/`, when it is a Go module (it has a `go.mod`), is listed in
-`go.work` as well: services that import it build against the directory, and
-"go to definition" opens it there. `go.work` is rewritten by `ngs`, `nas` and
-`update`, so after creating `common/` run `devkit update` once; a line added
-by hand would not survive. As with everything in `go.work`, this is for your
-machine: CI builds a service with the version of your `common` that its
-`go.mod` requires.
+Your own shared Go code goes in a `lib/` module in the project directory
+(`lib/go.mod`): pure functions every service may import (odds conversion,
+settlement rules), released by git tag and required by version in each
+service's `go.mod`. When `lib/go.mod` exists, `ngs`, `nas` and `update` list
+`./lib` in `go.work` as well, so services build against the directory and
+"go to definition" opens it there; after creating `lib/` run `devkit update`
+once, a line added by hand would not survive the next rewrite. As with
+everything in `go.work`, this is for your machine: CI builds a service with the
+`lib` version its `go.mod` requires. A `lib` hosted on a private GitLab needs
+`go env -w GOPRIVATE=<gitlab host>` and a `~/.netrc` line with a read token on
+every laptop; the CI templates write their own netrc from the job token. (A
+legacy `common/` module is still listed when it exists; new projects use `lib/`.)
 
 Do not edit `kit-common/`: a change there affects builds on your machine only.
 devkit never discards such a change, but `update` and `update --check` call it
@@ -189,9 +201,16 @@ without a pointer reads the guide when told to.
 `devkit lint` (what `make lint` runs, locally and in CI) checks a service
 against the team's conventions, whoever wrote the code. The generic rules
 are the same in every project: no middleware opened by hand (`rt.DB`,
-`rt.Redis`, `rt.Kafka`, `rt.S3`, `rt.Provider` instead), no float money
-(amount, balance, price, fee, ...), `request_id` on write methods, a comment
-on every IDL method, no `code`/`msg` inside any response struct
+`rt.Redis`, `rt.Kafka`, `rt.S3`, `rt.Provider` instead), money fields as
+`common.Money` and rates as `common.Decimal`, never a float (`money-type`,
+`rate-type`, `no-float-money`), `request_id` on write methods, a comment
+on every IDL method, `// @limit` on login, registration, password and code
+endpoints (`limit`), events inside a transaction through `PublishTx`
+(`outbox`), no `time.AfterFunc` for later work (`delay`: use `rt.Delay`), a
+Redis lock through `redisx.WithLock` rather than a hand-written `SetNX`
+(`lock`), no `sync.Mutex` in handler or repo (`mutex`: one replica only),
+`hertzx.Bind` rather than `c.BindAndValidate` (`bind`), at least one test in
+every handler package (`tests`), no `code`/`msg` inside any response struct
 (`no-envelope`: a method returns its data struct; the gateway handler ends
 with `hertzx.OK` / `hertzx.Fail`, which add the `{code, msg, data}` envelope
 once, and RPC failures are BizStatusErrors) and no raw `c.JSON` in a gateway
@@ -213,7 +232,8 @@ calls only there), `lint.money_words` (extra money field names),
 Thrift files per domain, with a comment each, inside their domain's range,
 and used as the generated `errcode` constants: `error-code`, `error-dup`,
 `error-range`, `error-comment`),
-`lint.disable`.
+`lint.report_service` (the only service that may open the report database:
+`report-only`), `lint.handler_methods`, `lint.disable`.
 Every finding says what to do instead; exit status 1 stops CI. A line opts
 out of one rule with `//devkit:lint-ignore <rule>`. `idl-lock` closes the
 "push the IDL first" trap of separate repositories: `make gen` writes
@@ -275,11 +295,11 @@ echo 'source "$HOME/.devkit/env"' >> ~/.zshrc    # or ~/.bashrc
 |---------|------------------|
 | `devkit ngs <service>` | create an RPC service (Kitex) in the current project directory |
 | `devkit nas <service>` | create an API service (HTTP, Hertz) in the current project directory |
-| `devkit update` | upgrade the devkit-managed files (Makefile, CI, Dockerfile, `main.go`) to the latest template. Inside a service it updates that service; in the project directory it updates every service. `--check` only shows versions and local changes |
+| `devkit update` | upgrade the devkit-managed files (Makefile, CI, Dockerfile, `main.go`, `conf/README*.md`) to the latest template. Inside a service it updates that service; in the project directory it updates every service. `--check` only shows versions and local changes |
 | `devkit self-update` | upgrade devkit itself. `--check` only reports |
 | `devkit lint` | check the service against the team's rules (what `make lint` runs); see above |
 | `devkit hooks` | install the git pre-push hook that runs `make lint && make test` before every push (what CI's test stage runs; `--remove` to drop it, `git push --no-verify` to skip once). `ngs` and `update` install it too |
-| `devkit lock` | make the framework's files and generated code read-only, so the editor says so (`ngs`, `update` and `make gen` do it; `--unlock` undoes it, `--list` shows the files). A reminder: lint, the hook and CI still decide |
+| `devkit lock` | make the framework's files and generated code read-only, so the editor says so (`ngs`, `update` and `make gen` do it; `--unlock` undoes it, `--list` shows the files, `-q` is what the Makefile passes). The project's `kit-common/` checkout is locked too. A reminder: lint, the hook and CI still decide |
 | `devkit doctor` | show the state of git, Go, kitex, thriftgo and hz against the team's versions. `--fix` installs what is missing and replaces a generator of another version |
 | `devkit version` | version info for bug reports |
 
@@ -357,8 +377,8 @@ Values that also live in your own files, such as `Port`, stay as created.
 
 ### What `update` does to your files
 
-Files you own (`go.mod`, `idl.mk`, `app/*`, `conf/*.yaml`, `handler/*`, `README.md`) are created once
-and never touched again. For the managed files:
+Files you own (`go.mod`, `idl.mk`, `app/*`, `conf/*.yaml`, `handler/*`, `repo/*`, `deps/*`, `README.md`) are created once
+and never touched again; `idl.lock` is written by `make gen`, never by `update`. For the managed files:
 
 | Your file | `devkit update` | with `--force` |
 |-----------|-----------------|----------------|
@@ -369,8 +389,9 @@ and never touched again. For the managed files:
 
 ### Files you cannot edit by accident
 
-Open the Makefile, `cmd/<service>/main.go`, anything under `kitex_gen/` or
-`hertz_gen/`, hz's `router/*.go`, the OpenAPI document or `idl.lock` in an
+Open the Makefile, `cmd/<service>/main.go`, anything under `kitex_gen/`,
+`hertz_gen/` or `.idl/`, hz's generated `router/` files (not `middleware.go`),
+`.hz`, `.devkit/manifest.json`, the OpenAPI document or `idl.lock` in an
 editor and it says **read-only**, exactly like a library in the Go module
 cache. That is `devkit lock`: the files devkit wrote (and replaces on
 `update`) plus everything a generator writes lose their write bit. Your own
@@ -417,8 +438,9 @@ Anonymous GitHub API calls are limited to 60 per hour:
 ## For maintainers
 
 **Repositories.** `devkit` (this CLI), `devkit-registry` (the `kitex-service`
-template; format in [docs/registry.md](docs/registry.md)), `common` (shared Go
-library imported by every service), plus one IDL repository per project.
+and `hertz-service` templates; format in [docs/registry.md](docs/registry.md)),
+`devkit-common` (the shared Go library imported by every service, checked out
+in every project as `kit-common/`), plus one IDL repository per project.
 
 **Global configuration** lives in `~/.devkit/config.yaml`, written by
 `install.sh`. The hidden command `devkit config show|set` edits it; every key
