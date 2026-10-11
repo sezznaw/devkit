@@ -32,7 +32,7 @@ what the feature is for, how it was tried out, what remains for others.
 
 The facts come from git and the build, not from memory. Run it before the
 final commit; the Markdown is the hand-over, its gist goes into the
-commit message (idl/AGENTS.md 第 6 节 and the sportsbook-finish skill).
+commit message (the project's AGENTS.md and its finishing skill say how).
 
   devkit report                      my commits of the last 24h + uncommitted changes
   devkit report --since 3d           a longer task
