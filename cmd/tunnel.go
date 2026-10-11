@@ -3,13 +3,11 @@ package cmd
 import (
 	"context"
 	"fmt"
-	"os"
 	"os/signal"
 	"sort"
 	"strconv"
 	"strings"
 	"syscall"
-	"text/tabwriter"
 
 	"github.com/spf13/cobra"
 
@@ -54,7 +52,7 @@ devkit.yaml (takeover_ssh), so each project reaches its own environment.`,
 		}
 		defer t.Close()
 		printTunnel(layout, env, tunnelAll)
-		fmt.Println("\ntunnel is up; Ctrl+C closes it")
+		fmt.Println("\ntunnel is up; Ctrl+C closes it. Credentials are shown once and written nowhere.")
 		select {
 		case <-ctx.Done():
 		case err := <-t.Done():
@@ -65,51 +63,107 @@ devkit.yaml (takeover_ssh), so each project reaches its own environment.`,
 	},
 }
 
-// printTunnel lists the forwards a developer connects a client to (the ones
-// with a ready-made command) and the business services; the rest of the
-// cluster's ports (metrics, internal RPC, probes) are tunnelled too but only
-// counted, --all shows them. Then the credentials.
+// printTunnel prints one block per middleware a developer connects to: the
+// local address, a ready-made client command and the credentials whose
+// variable names mention that middleware. Business services and the rest of
+// the cluster's ports are forwarded too but only counted; --all lists
+// everything and every variable.
 func printTunnel(l *takeover.Layout, env *takeover.Env, all bool) {
 	services := map[string]bool{}
 	for _, s := range env.Services {
 		services[s.Name] = true
 	}
-	w := tabwriter.NewWriter(os.Stdout, 0, 4, 2, ' ', 0)
-	fmt.Fprintln(w, "WHAT\tLOCAL\tCLUSTER\tHOW")
-	// A headless twin of a Service ("starrocks-fe-search" next to
-	// "starrocks-fe-service", same port) is the same thing twice.
 	clusterIP := map[string]bool{}
 	for _, f := range l.Forwards {
-		if strings.HasPrefix(f.Target, "10.43.") || !strings.HasPrefix(f.Target, "10.42.") {
+		if !strings.HasPrefix(f.Target, "10.42.") {
 			clusterIP[stem(f.What)] = true
 		}
 	}
-	hidden := 0
+	used := map[string]bool{}
+	hidden, shown := 0, 0
 	for _, f := range l.Forwards {
 		if f.Target == "" {
 			continue
 		}
 		how := howTo(f)
 		twin := strings.HasPrefix(f.Target, "10.42.") && clusterIP[stem(f.What)] && !strings.Contains(f.What, "mysql") && !strings.Contains(f.What, "valkey") && !strings.Contains(f.What, "redpanda")
-		if !all && (how == "" || twin) && !services[f.What] {
+		if !all && (how == "" || twin || services[f.What]) {
 			hidden++
 			continue
 		}
-		fmt.Fprintf(w, "%s\t127.0.0.1:%d\t%s\t%s\n", f.What, f.LocalPort, f.Target, how)
+		shown++
+		fmt.Printf("%-28s 127.0.0.1:%d   %s\n", f.What, f.LocalPort, how)
+		for _, k := range sortedKeys(l.EnvVars) {
+			if !used[k] && relatedVar(k, f.What) {
+				used[k] = true
+				fmt.Printf("%-28s   %s=%s\n", "", k, l.EnvVars[k])
+			}
+		}
 	}
-	w.Flush()
+	var rest []string
+	for _, k := range sortedKeys(l.EnvVars) {
+		if !used[k] && (all || looksSecret(k)) {
+			rest = append(rest, k)
+		}
+	}
+	if len(rest) > 0 {
+		fmt.Printf("%-28s\n", "other settings")
+		for _, k := range rest {
+			fmt.Printf("%-28s   %s=%s\n", "", k, l.EnvVars[k])
+		}
+	}
 	if hidden > 0 {
-		fmt.Printf("(+%d more cluster ports forwarded but not listed: internal RPC, metrics, probes; --all shows them)\n", hidden)
+		fmt.Printf("\n%d more ports forwarded (the %d services at their port + 1000, internal RPC, metrics, probes); --all lists them\n", hidden, len(env.Services))
 	}
-	keys := make([]string, 0, len(l.EnvVars))
-	for k := range l.EnvVars {
+}
+
+func sortedKeys(m map[string]string) []string {
+	keys := make([]string, 0, len(m))
+	for k := range m {
 		keys = append(keys, k)
 	}
 	sort.Strings(keys)
-	fmt.Println("\ncredentials and settings the deployments use (shown once, not written anywhere):")
-	for _, k := range keys {
-		fmt.Printf("  %s=%s\n", k, l.EnvVars[k])
+	return keys
+}
+
+// relatedVar says whether an environment variable belongs to the middleware
+// a forward is for, by the words in its name.
+func relatedVar(name, what string) bool {
+	n := strings.ToUpper(name)
+	w := strings.ToUpper(what)
+	words := map[string][]string{
+		"MYSQL":      {"MYSQL", "TENANT_CODE"},
+		"VALKEY":     {"VALKEY", "REDIS"},
+		"REDIS":      {"VALKEY", "REDIS"},
+		"NACOS":      {"NACOS"},
+		"REDPANDA":   {"KAFKA", "REDPANDA"},
+		"KAFKA":      {"KAFKA", "REDPANDA"},
+		"STARROCKS":  {"STARROCKS"},
+		"SEAWEEDFS":  {"S3_", "SEAWEED", "MINIO"},
+		"MINIO":      {"S3_", "MINIO"},
+		"CENTRIFUGO": {"CENTRIFUGO"},
+		"TEMPO":      {"OTEL"},
 	}
+	for key, list := range words {
+		if strings.Contains(w, key) {
+			for _, x := range list {
+				if strings.Contains(n, x) {
+					return true
+				}
+			}
+		}
+	}
+	return false
+}
+
+func looksSecret(name string) bool {
+	n := strings.ToUpper(name)
+	for _, x := range []string{"PASSWORD", "SECRET", "TOKEN", "KEY"} {
+		if strings.Contains(n, x) {
+			return true
+		}
+	}
+	return false
 }
 
 // howTo guesses the client command from the cluster port (and, for Kafka,
