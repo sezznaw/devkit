@@ -95,8 +95,11 @@ func Run(o Options) ([]Finding, error) {
 		out = append(out, checkReportOnly(o.Root, o.ReportService)...)
 	}
 	if o.IDLDir != "" {
-		idl := filepath.Join(o.IDLDir, service, service+".thrift")
-		if _, err := os.Stat(idl); err == nil {
+		// The service's IDL directory: one file for an RPC service, one file
+		// per domain for a gateway (plus a docs-only file).
+		files, _ := filepath.Glob(filepath.Join(o.IDLDir, service, "*.thrift"))
+		sort.Strings(files)
+		for _, idl := range files {
 			fs, err := checkIDL(idl, isAPIService(m), moneyName)
 			if err != nil {
 				return nil, err
@@ -427,6 +430,9 @@ func checkIDL(path string, api bool, moneyName *regexp.Regexp) ([]Finding, error
 	lines := strings.Split(string(data), "\n")
 	rel := path
 	var out []Finding
+	if api {
+		out = append(out, checkDomainFile(rel, lines)...)
+	}
 	// First pass: struct fields.
 	fields := map[string]map[string]bool{} // struct -> field names
 	var shapes []respShape                 // every *Resp struct, in order

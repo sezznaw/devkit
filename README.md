@@ -195,7 +195,9 @@ on every IDL method, no `code`/`msg` inside any response struct
 (`no-envelope`: a method returns its data struct; the gateway handler ends
 with `hertzx.OK` / `hertzx.Fail`, which add the `{code, msg, data}` envelope
 once, and RPC failures are BizStatusErrors) and no raw `c.JSON` in a gateway
-handler (`envelope-write`), framework files
+handler (`envelope-write`), one file per gateway domain whose name,
+namespace and route segment agree and which includes only common
+(`domain-file`, `domain-path`, `domain-include`), framework files
 untouched, the common library at the
 team's version in go.mod (`common-version`) and the project's `kit-common/`
 checkout clean (`common-checkout`: go.work makes local builds use it), zlog

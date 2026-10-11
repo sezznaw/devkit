@@ -7,6 +7,15 @@ import (
 	"testing"
 )
 
+func writeIDL(t *testing.T, name, src string) string {
+	t.Helper()
+	p := filepath.Join(t.TempDir(), name)
+	if err := os.WriteFile(p, []byte(src), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	return p
+}
+
 func lintIDL(t *testing.T, api bool, src string) []Finding {
 	t.Helper()
 	p := filepath.Join(t.TempDir(), "x.thrift")
