@@ -447,6 +447,8 @@ func checkIDL(path string, api bool, moneyName *regexp.Regexp) ([]Finding, error
 	rel := path
 	var out []Finding
 	isCommonFile := filepath.Base(filepath.Dir(path)) == "common"
+	totalLines := map[string]int{}   // struct -> line of its `total` field
+	listStructs := map[string]bool{} // structs with a `list<...> items` field
 	if api {
 		out = append(out, checkDomainFile(rel, lines)...)
 	}
@@ -471,8 +473,14 @@ func checkIDL(path string, api bool, moneyName *regexp.Regexp) ([]Finding, error
 		if m := fieldRE.FindStringSubmatch(line); m != nil {
 			typ, name := strings.TrimSpace(m[1]), m[2]
 			fields[cur][name] = true
-			if !isCommonFile && (name == "page_size" || name == "total" || (name == "page" && typ != "common.PageReq" && typ != "common.PageInfo")) && !ignored(line, "paging") {
-				out = append(out, Finding{rel, i + 1, "paging", fmt.Sprintf("%s.%s: paging is `common.PageReq page` in a request and `common.PageInfo page` in a response (include \"../common/common.thrift\"; the service applies the defaults with pagex.Normalize), not loose page / page_size / total fields", cur, name)})
+			if !isCommonFile && (name == "page_size" || (name == "page" && typ != "common.PageReq" && typ != "common.PageInfo")) && !ignored(line, "paging") {
+				out = append(out, Finding{rel, i + 1, "paging", fmt.Sprintf("%s.%s: paging is `common.PageReq page` in a request and `common.PageInfo page` in a response (include \"../common/common.thrift\"; the service applies the defaults with pagex.Normalize), not loose page / page_size fields", cur, name)})
+			}
+			if !isCommonFile && name == "total" {
+				totalLines[cur] = i + 1 // a list response's total belongs in common.PageInfo; checked once the struct is read
+			}
+			if !isCommonFile && name == "items" && strings.HasPrefix(typ, "list<") {
+				listStructs[cur] = true
 			}
 			if len(shapes) > 0 && shapes[len(shapes)-1].name == cur {
 				fm := fieldFullRE.FindStringSubmatch(line)
@@ -489,6 +497,11 @@ func checkIDL(path string, api bool, moneyName *regexp.Regexp) ([]Finding, error
 			case isRate && !isRateType(typ) && !ignored(line, "rate-type"):
 				out = append(out, Finding{rel, i + 1, "rate-type", fmt.Sprintf("%s.%s is %s: odds, fee rates, FX rates and percentages are common.Decimal (include \"../common/common.thrift\"; a decimal string like \"1.85\")", cur, name, typ)})
 			}
+		}
+	}
+	for name, line := range totalLines {
+		if listStructs[name] && !ignored(lines[line-1], "paging") {
+			out = append(out, Finding{rel, line, "paging", fmt.Sprintf("%s.total: a list response carries `common.PageInfo page` (page, page_size, total) next to its items, not a loose total", name)})
 		}
 	}
 	// Second pass: methods.

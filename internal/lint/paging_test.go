@@ -19,8 +19,8 @@ struct Stats {
 }
 `
 	fs := rules(lintIDL(t, true, bad), "paging")
-	if len(fs) != 4 {
-		t.Fatalf("want 4 paging findings, got %d: %v", len(fs), fs)
+	if len(fs) != 3 { // page, page_size, MemberList.total; Stats.total is a statistic, not paging
+		t.Fatalf("want 3 paging findings, got %d: %v", len(fs), fs)
 	}
 	good := `include "../common/common.thrift"
 namespace go member
