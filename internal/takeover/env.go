@@ -64,9 +64,9 @@ type Pod struct {
 // CollectOptions are the node-side flags.
 type CollectOptions struct {
 	Kubeconfig string
-	Namespace  string   // the services' namespace
+	Namespaces []string // the services' namespaces (ser-vendor lives apart from the rest)
 	Infra      []string // infrastructure namespaces
-	Secrets    []string // "namespace/name" of the secrets whose keys become env vars
+	Secrets    []string // "namespace/name" of the secrets a deployment may draw env vars from
 	Service    string   // whose deployment's env to include; "" for none
 }
 
@@ -94,16 +94,18 @@ func Collect(o CollectOptions) (*Env, error) {
 	if env.NodeIP == "" {
 		return nil, fmt.Errorf("takeover env: no node with an InternalIP")
 	}
-	svcs, err := k.services(o.Namespace)
-	if err != nil {
-		return nil, err
-	}
-	for _, s := range svcs.Items {
-		if len(s.Spec.Ports) == 0 || s.Spec.ClusterIP == "" || s.Spec.ClusterIP == "None" {
-			continue
+	for _, ns := range o.Namespaces {
+		svcs, err := k.services(ns)
+		if err != nil {
+			return nil, err
 		}
-		p := s.Spec.Ports[0]
-		env.Services = append(env.Services, Service{Name: s.Metadata.Name, Namespace: o.Namespace, ClusterIP: s.Spec.ClusterIP, Port: p.Port, TargetPort: p.TargetPort.Int()})
+		for _, s := range svcs.Items {
+			if len(s.Spec.Ports) == 0 || s.Spec.ClusterIP == "" || s.Spec.ClusterIP == "None" {
+				continue
+			}
+			p := s.Spec.Ports[0]
+			env.Services = append(env.Services, Service{Name: s.Metadata.Name, Namespace: ns, ClusterIP: s.Spec.ClusterIP, Port: p.Port, TargetPort: p.TargetPort.Int()})
+		}
 	}
 	for _, ns := range o.Infra {
 		list, err := k.services(ns)
@@ -151,18 +153,70 @@ func Collect(o CollectOptions) (*Env, error) {
 			env.Infra = append(env.Infra, ep)
 		}
 	}
+	// The plain environment variables of a deployment (NACOS_ADDR,
+	// NACOS_NAMESPACE, the OTLP endpoint, TENANT_CODE) describe the
+	// environment, not one service. The service asked for comes first; when
+	// none is named, or it has none, the first deployment that carries
+	// NACOS_ADDR (a backend) provides them. The same deployment decides which
+	// secrets are handed out: only those it draws env vars from (envFrom or a
+	// secretKeyRef), and among those only the ones the node's --secret list
+	// allows. A developer gets what the service would have in the cluster,
+	// not every credential of the environment.
+	var deps []deployment
+	for _, ns := range o.Namespaces {
+		var list struct {
+			Items []deployment `json:"items"`
+		}
+		if err := k.get(&list, "deployments", "-n", ns); err != nil {
+			return nil, err
+		}
+		for i := range list.Items {
+			list.Items[i].Metadata.Namespace = ns
+		}
+		deps = append(deps, list.Items...)
+	}
+	var chosen *deployment
+	for i := range deps {
+		if deps[i].Metadata.Name == o.Service {
+			chosen = &deps[i]
+		}
+	}
+	if o.Service != "" && chosen == nil {
+		return nil, fmt.Errorf("takeover env: no deployment %q in %s (is it a service of this environment?)", o.Service, strings.Join(o.Namespaces, ", "))
+	}
+	if chosen == nil || chosen.plain()["NACOS_ADDR"] == "" {
+		for i := range deps {
+			if deps[i].plain()["NACOS_ADDR"] != "" {
+				chosen = &deps[i]
+				break
+			}
+		}
+	}
+	if chosen == nil {
+		return nil, fmt.Errorf("takeover env: no deployment with NACOS_ADDR in %s", strings.Join(o.Namespaces, ", "))
+	}
+	allowed := map[string]bool{}
 	for _, ref := range o.Secrets {
-		ns, name, ok := strings.Cut(ref, "/")
-		if !ok {
+		if _, _, ok := strings.Cut(ref, "/"); !ok {
 			return nil, fmt.Errorf("takeover env: --secret %q must be namespace/name", ref)
+		}
+		allowed[ref] = true
+	}
+	for name, keys := range chosen.secrets() {
+		ref := chosen.Metadata.Namespace + "/" + name
+		if !allowed[ref] {
+			continue
 		}
 		var sec struct {
 			Data map[string]string `json:"data"`
 		}
-		if err := k.get(&sec, "secret", name, "-n", ns); err != nil {
+		if err := k.get(&sec, "secret", name, "-n", chosen.Metadata.Namespace); err != nil {
 			return nil, err
 		}
 		for key, b64 := range sec.Data {
+			if keys != nil && !keys[key] {
+				continue
+			}
 			v, err := decodeBase64(b64)
 			if err != nil {
 				return nil, fmt.Errorf("takeover env: secret %s key %s: %w", ref, key, err)
@@ -170,61 +224,7 @@ func Collect(o CollectOptions) (*Env, error) {
 			env.EnvVars[key] = v
 		}
 	}
-	// The plain environment variables of a deployment (NACOS_ADDR,
-	// NACOS_NAMESPACE, the OTLP endpoint, TENANT_CODE) describe the
-	// environment, not one service. The service asked for comes first; when
-	// none is named, or it has none, the first deployment that carries
-	// NACOS_ADDR (a backend) provides them.
-	var deps struct {
-		Items []struct {
-			Metadata struct{ Name string } `json:"metadata"`
-			Spec     struct {
-				Template struct {
-					Spec struct {
-						Containers []struct {
-							Env []struct {
-								Name  string `json:"name"`
-								Value string `json:"value"`
-							} `json:"env"`
-						} `json:"containers"`
-					} `json:"spec"`
-				} `json:"template"`
-			} `json:"spec"`
-		} `json:"items"`
-	}
-	if err := k.get(&deps, "deployments", "-n", o.Namespace); err != nil {
-		return nil, err
-	}
-	plain := func(name string) map[string]string {
-		for _, d := range deps.Items {
-			if d.Metadata.Name != name {
-				continue
-			}
-			out := map[string]string{}
-			for _, c := range d.Spec.Template.Spec.Containers {
-				for _, e := range c.Env {
-					if e.Value != "" {
-						out[e.Name] = e.Value
-					}
-				}
-			}
-			return out
-		}
-		return nil
-	}
-	chosen := plain(o.Service)
-	if chosen["NACOS_ADDR"] == "" {
-		for _, d := range deps.Items {
-			if p := plain(d.Metadata.Name); p["NACOS_ADDR"] != "" {
-				chosen = p
-				break
-			}
-		}
-	}
-	if o.Service != "" && plain(o.Service) == nil {
-		return nil, fmt.Errorf("takeover env: no deployment %q in %s (is it a service of this environment?)", o.Service, o.Namespace)
-	}
-	for k, v := range chosen {
+	for k, v := range chosen.plain() {
 		env.EnvVars[k] = v
 	}
 	sort.Slice(env.Services, func(i, j int) bool { return env.Services[i].Name < env.Services[j].Name })
@@ -247,6 +247,69 @@ type serviceList struct {
 			} `json:"ports"`
 		} `json:"spec"`
 	} `json:"items"`
+}
+
+// deployment is the part of a Deployment that Collect reads.
+type deployment struct {
+	Metadata struct{ Name, Namespace string } `json:"metadata"`
+	Spec     struct {
+		Template struct {
+			Spec struct {
+				Containers []struct {
+					Env []struct {
+						Name      string `json:"name"`
+						Value     string `json:"value"`
+						ValueFrom *struct {
+							SecretKeyRef *struct{ Name, Key string } `json:"secretKeyRef"`
+						} `json:"valueFrom"`
+					} `json:"env"`
+					EnvFrom []struct {
+						SecretRef *struct{ Name string } `json:"secretRef"`
+					} `json:"envFrom"`
+				} `json:"containers"`
+			} `json:"spec"`
+		} `json:"template"`
+	} `json:"spec"`
+}
+
+// plain is the literal environment variables of the deployment's containers.
+func (d *deployment) plain() map[string]string {
+	out := map[string]string{}
+	for _, c := range d.Spec.Template.Spec.Containers {
+		for _, e := range c.Env {
+			if e.Value != "" {
+				out[e.Name] = e.Value
+			}
+		}
+	}
+	return out
+}
+
+// secrets names the Secrets the deployment draws environment variables from,
+// each with the keys it uses, or nil when it takes the whole Secret (envFrom).
+func (d *deployment) secrets() map[string]map[string]bool {
+	out := map[string]map[string]bool{}
+	for _, c := range d.Spec.Template.Spec.Containers {
+		for _, ef := range c.EnvFrom {
+			if ef.SecretRef != nil {
+				out[ef.SecretRef.Name] = nil
+			}
+		}
+		for _, e := range c.Env {
+			if e.ValueFrom == nil || e.ValueFrom.SecretKeyRef == nil {
+				continue
+			}
+			ref := e.ValueFrom.SecretKeyRef
+			if keys, whole := out[ref.Name]; whole && keys == nil {
+				continue
+			}
+			if out[ref.Name] == nil {
+				out[ref.Name] = map[string]bool{}
+			}
+			out[ref.Name][ref.Key] = true
+		}
+	}
+	return out
 }
 
 func (k kubectl) services(ns string) (*serviceList, error) {

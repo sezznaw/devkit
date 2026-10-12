@@ -130,8 +130,8 @@ var takeoverListCmd = &cobra.Command{
 }
 
 var takeoverEnvFlags struct {
-	kubeconfig, namespace string
-	infra, secrets        []string
+	kubeconfig                  string
+	namespaces, infra, secrets []string
 }
 
 var takeoverEnvCmd = &cobra.Command{
@@ -146,7 +146,7 @@ var takeoverEnvCmd = &cobra.Command{
 		if strings.ContainsAny(service, " ;|&$`") {
 			service = ""
 		}
-		env, err := takeover.Collect(takeover.CollectOptions{Kubeconfig: takeoverEnvFlags.kubeconfig, Namespace: takeoverEnvFlags.namespace, Infra: takeoverEnvFlags.infra, Secrets: takeoverEnvFlags.secrets, Service: service})
+		env, err := takeover.Collect(takeover.CollectOptions{Kubeconfig: takeoverEnvFlags.kubeconfig, Namespaces: takeoverEnvFlags.namespaces, Infra: takeoverEnvFlags.infra, Secrets: takeoverEnvFlags.secrets, Service: service})
 		if err != nil {
 			return err
 		}
@@ -284,9 +284,9 @@ func init() {
 	takeoverCmd.Flags().IntVar(&takeoverFlags.port, "port", 0, "the local service's port (default: conf/local.yaml service.addr)")
 	takeoverCmd.Flags().BoolVar(&takeoverFlags.force, "force", false, "take over although someone else holds the same tag")
 	takeoverEnvCmd.Flags().StringVar(&takeoverEnvFlags.kubeconfig, "kubeconfig", "", "read-only kubeconfig")
-	takeoverEnvCmd.Flags().StringVar(&takeoverEnvFlags.namespace, "namespace", "", "the services' namespace")
+	takeoverEnvCmd.Flags().StringSliceVar(&takeoverEnvFlags.namespaces, "namespace", nil, "the services' namespaces")
 	takeoverEnvCmd.Flags().StringSliceVar(&takeoverEnvFlags.infra, "infra", nil, "infrastructure namespaces")
-	takeoverEnvCmd.Flags().StringSliceVar(&takeoverEnvFlags.secrets, "secret", nil, "namespace/name of the secrets whose keys become environment variables")
+	takeoverEnvCmd.Flags().StringSliceVar(&takeoverEnvFlags.secrets, "secret", nil, "namespace/name of the secrets a deployment may draw environment variables from")
 	takeoverCmd.AddCommand(takeoverListCmd, takeoverEnvCmd)
 	rootCmd.AddCommand(takeoverCmd)
 }
