@@ -130,7 +130,7 @@ var takeoverListCmd = &cobra.Command{
 }
 
 var takeoverEnvFlags struct {
-	kubeconfig                  string
+	kubeconfig                 string
 	namespaces, infra, secrets []string
 }
 
