@@ -49,9 +49,24 @@ const (
 
 // Plan computes the Layout. taken says whether a local port is in use.
 func Plan(env *Env, taken func(port int) bool) (*Layout, error) {
+	return PlanWith(env, taken, nil)
+}
+
+// PlanWith is Plan with the ports of a previous layout to keep: prefer maps
+// a forward's What to its local port. A refresh plans with the live layout's
+// ports so that the rewrite table and the tunnel never disagree, whatever
+// changed in the environment (a Pod gone, a Service added); only new names
+// get new ports.
+func PlanWith(env *Env, taken func(port int) bool, prefer map[string]int) (*Layout, error) {
 	l := &Layout{Rewrite: map[string]string{}, Services: map[string]string{}, EnvVars: map[string]string{}}
 	used := map[int]bool{}
-	pick := func(want int) int {
+	for _, p := range prefer {
+		used[p] = true // reserved for their names below
+	}
+	pick := func(what string, want int) int {
+		if p, ok := prefer[what]; ok {
+			return p
+		}
 		for p := want; p < 65535; p++ {
 			if !used[p] && !taken(p) {
 				used[p] = true
@@ -68,10 +83,12 @@ func Plan(env *Env, taken func(port int) bool) (*Layout, error) {
 		// Both ports of a pair must be free (a second tool on this machine
 		// holds the first pair).
 		main := 0
-		for p := nacosPort + 10000; p < nacosPort+10000+500; p++ {
+		if p, ok := prefer[fmt.Sprintf("%s %d", ep.Name, nacosPort)]; ok {
+			main = p
+		}
+		for p := nacosPort + 10000; main == 0 && p < nacosPort+10000+500; p++ {
 			if !used[p] && !taken(p) && !used[p+nacosGRPCOffset] && !taken(p+nacosGRPCOffset) {
 				main = p
-				break
 			}
 		}
 		if main == 0 {
@@ -88,11 +105,13 @@ func Plan(env *Env, taken func(port int) bool) (*Layout, error) {
 	infra := append([]Endpoint(nil), env.Infra...)
 	sort.SliceStable(infra, func(i, j int) bool { return infra[i].ClusterIP != "" && infra[j].ClusterIP == "" })
 	for _, ep := range infra {
+		seen := map[int]bool{} // a Service lists 9094/TCP and 9094/UDP as two ports; one forward
 		for _, p := range ep.Ports {
-			if hasPort(ep.Ports, nacosPort) && (p == nacosPort || p == nacosPort+nacosGRPCOffset) {
+			if seen[p] || hasPort(ep.Ports, nacosPort) && (p == nacosPort || p == nacosPort+nacosGRPCOffset) {
 				continue
 			}
-			local := pick(infraLocalPort(p))
+			seen[p] = true
+			local := pick(fmt.Sprintf("%s %d", ep.Name, p), infraLocalPort(p))
 			if local == 0 {
 				return nil, fmt.Errorf("takeover: no free local port for %s:%d", ep.Name, p)
 			}
@@ -104,7 +123,7 @@ func Plan(env *Env, taken func(port int) bool) (*Layout, error) {
 		if s.TargetPort == 0 {
 			want = s.Port + 1000
 		}
-		local := pick(want)
+		local := pick(s.Name, want)
 		if local == 0 {
 			return nil, fmt.Errorf("takeover: no free local port for service %s", s.Name)
 		}
@@ -146,6 +165,23 @@ func (l *Layout) addInfra(ep Endpoint, port, local int) {
 		}
 	}
 	l.Forwards = append(l.Forwards, Forward{LocalPort: local, Target: target, What: fmt.Sprintf("%s %d", ep.Name, port)})
+}
+
+// dropPort removes every rewrite entry that points at a local port whose
+// forward could not be opened: better an unrewritten cluster address that
+// fails visibly than one that points at a port nobody listens on.
+func (l *Layout) dropPort(local int) {
+	to := fmt.Sprintf("127.0.0.1:%d", local)
+	for k, v := range l.Rewrite {
+		if v == to {
+			delete(l.Rewrite, k)
+		}
+	}
+	for k, v := range l.Services {
+		if v == to {
+			delete(l.Services, k)
+		}
+	}
 }
 
 func dnsNames(name, ns string) []string {

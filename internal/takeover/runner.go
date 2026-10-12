@@ -271,39 +271,53 @@ func (r *Runner) refresh(ctx context.Context) {
 		r.say("WARNING: refresh: %v", err)
 		return
 	}
-	// Our own ports count as free, everything else as it is: the plan then
-	// reproduces our allocation and only the targets can differ.
+	// The live layout's ports stay with their names (PlanWith), so the new
+	// rewrite table agrees with the tunnel by construction; what can differ
+	// is a target (a Pod got a new IP), a forward that is new (a Service
+	// appeared) or one that is gone. Our own ports are not "taken".
 	ours := map[int]bool{}
 	old := map[string]Forward{}
+	prefer := map[string]int{}
 	for _, f := range r.layout.Forwards {
 		ours[f.LocalPort] = true
 		old[f.What] = f
+		prefer[f.What] = f.LocalPort
 	}
-	layout, err := Plan(env, func(p int) bool { return !ours[p] && PortTaken(p) })
+	layout, err := PlanWith(env, func(p int) bool { return !ours[p] && PortTaken(p) }, prefer)
 	if err != nil {
 		r.say("WARNING: refresh: %v", err)
 		return
 	}
-	for i, f := range layout.Forwards {
+	kept := []Forward{}
+	for _, f := range layout.Forwards {
+		if f.Target == "" {
+			continue
+		}
 		prev, ok := old[f.What]
-		if !ok || f.Target == "" {
-			continue
-		}
-		if prev.LocalPort != f.LocalPort {
-			// the set of forwards changed shape; keep what the tunnel has
-			layout.Forwards[i] = prev
-			continue
-		}
-		if prev.Target != f.Target {
+		switch {
+		case !ok:
+			if err := r.tunnel.Forward(f); err != nil {
+				r.say("WARNING: new forward %s: %v", f.What, err)
+				layout.dropPort(f.LocalPort)
+				continue
+			}
+			r.say("%s appeared; forwarded on :%d", f.What, f.LocalPort)
+		case prev.Target != f.Target:
 			_ = r.tunnel.Cancel(prev)
 			if err := r.tunnel.Forward(f); err != nil {
 				r.say("WARNING: re-point %s: %v", f.What, err)
-				layout.Forwards[i] = prev
-			} else {
-				r.say("%s moved to %s; tunnel re-pointed", f.What, f.Target)
+				layout.dropPort(f.LocalPort)
+				continue
 			}
+			r.say("%s moved to %s; tunnel re-pointed", f.What, f.Target)
 		}
+		kept = append(kept, f)
+		delete(old, f.What)
 	}
+	for _, prev := range old { // gone from the environment
+		_ = r.tunnel.Cancel(prev)
+	}
+	layout.Forwards = kept
 	r.layout = layout
 	r.env = env
 	if list, err := r.nacos.Takeovers(r.serviceNamesList()); err == nil {

@@ -1,6 +1,7 @@
 package takeover
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 )
@@ -115,5 +116,69 @@ func TestListeningSeesOwnListener(t *testing.T) {
 	l.Close()
 	if Listening(l.port()) {
 		t.Errorf("closed listener on %d still seen", l.port())
+	}
+}
+
+// A refresh plans with the live layout's ports: the same names keep the same
+// local ports even when the environment gained an endpoint earlier in the
+// order, and a Service that lists one port twice (TCP and UDP) gets one
+// forward.
+func TestPlanWithKeepsPortsByName(t *testing.T) {
+	env := &Env{NodeIP: "172.31.41.180",
+		Services: []Service{{Name: "ser-auth", Namespace: "sportsbook-dev", ClusterIP: "10.43.128.101", Port: 80, TargetPort: 8120}},
+		Infra: []Endpoint{
+			{Name: "nacos", Namespace: "sportsbook-dev-infra", ClusterIP: "10.43.243.195", Ports: []int{8848, 9848}},
+			{Name: "alertmanager-operated", Namespace: "monitoring", Ports: []int{9093, 9094, 9094}, Pods: []Pod{{Name: "am-0", IP: "10.42.1.165"}}},
+			{Name: "redpanda", Namespace: "sportsbook-dev-infra", Ports: []int{9093}, Pods: []Pod{{Name: "redpanda-0", IP: "10.42.1.38"}}},
+		}}
+	free := func(int) bool { return false }
+	first, err := Plan(env, free)
+	if err != nil {
+		t.Fatal(err)
+	}
+	port := map[string]int{}
+	for _, f := range first.Forwards {
+		if _, dup := port[f.What]; dup {
+			t.Fatalf("%s forwarded twice", f.What)
+		}
+		port[f.What] = f.LocalPort
+	}
+	if first.Rewrite["redpanda.sportsbook-dev-infra:9093"] != fmt.Sprintf("127.0.0.1:%d", port["redpanda 9093"]) {
+		t.Fatalf("rewrite and forward disagree: %v", first.Rewrite["redpanda.sportsbook-dev-infra:9093"])
+	}
+	// The environment changes shape: a new endpoint sorts before redpanda and
+	// redpanda-0 has a new IP.
+	env.Infra = append(env.Infra[:2], append([]Endpoint{{Name: "loki", Namespace: "monitoring", ClusterIP: "10.43.1.1", Ports: []int{9093}}}, env.Infra[2:]...)...)
+	env.Infra[len(env.Infra)-1].Pods[0].IP = "10.42.1.99"
+	prefer := map[string]int{}
+	for _, f := range first.Forwards {
+		prefer[f.What] = f.LocalPort
+	}
+	second, err := PlanWith(env, free, prefer)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, f := range second.Forwards {
+		p, ok := prefer[f.What]
+		if ok && p != f.LocalPort {
+			t.Fatalf("%s moved from %d to %d on refresh", f.What, p, f.LocalPort)
+		}
+		if !ok {
+			for _, q := range prefer {
+				if q == f.LocalPort {
+					t.Fatalf("new forward %s took a kept port %d", f.What, q)
+				}
+			}
+		}
+	}
+	if second.Rewrite["10.42.1.99:9093"] != fmt.Sprintf("127.0.0.1:%d", prefer["redpanda 9093"]) {
+		t.Fatalf("new Pod IP not on redpanda's port: %v", second.Rewrite["10.42.1.99:9093"])
+	}
+	if second.NacosAddr != first.NacosAddr {
+		t.Fatalf("nacos moved: %s -> %s", first.NacosAddr, second.NacosAddr)
+	}
+	second.dropPort(prefer["redpanda 9093"])
+	if _, ok := second.Rewrite["10.42.1.99:9093"]; ok {
+		t.Fatal("dropPort left the entry")
 	}
 }
