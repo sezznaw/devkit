@@ -149,6 +149,10 @@ AGENTS.md 放项目的规矩；常做的几种任务的**分步做法**是 skill
 IDL 新增的方法 / 结构体 / 错误码、`make lint` / `make test` 结果、`app/verify.go`（部署后检查）有没有改——输出一份 Markdown 汇报，
 只给作者留几处 `（填写：…）`：做了什么功能、怎么验证的、还要人做什么。`--since 24h|3d|<提交号>` 定范围，`--no-run` 不跑 lint 和测试，`--json` 给程序读。
 
+### 从本机接管 dev 的一个服务
+
+`devkit takeover <服务>` 让你在 IDE 里（打着断点）启动的那个服务成为 dev 上该服务的实例，只接收带 `X-Dev-Tag: <你的 tag>` 的请求，其他请求照常走 dev 自己的实例。工具开一条 ssh 连接到 dev 的节点（infra 仓库配置的 `takeover` 账号：forced command、只许 TCP 转发），把集群里的地址都转到本机（服务端口 +1000、中间件 +10000），持续刷新 `<服务>/.devkit/takeover.json`，并在本地端口监听期间把本机实例注册进 Nacos 的 `DEV_TAKEOVER` 组。服务不设 `APP_ENV` 照常启动，发现标记文件就进入接管模式：用 dev 的配置、隧道地址，不注册、不消费事件、不转发 outbox、不跑延时任务、不开 metrics 端口。路由逻辑在 kit-common（`devroute`）：`APP_ENV=dev` 开，uat 和 prod 关，请求路径上没有它的任何东西。ssh 目标来自 IDL 仓库 devkit.yaml 的 `takeover_ssh`；`~/.devkit/takeover.yaml` 可以按项目覆盖它和 tag（`projects: {<目录名>: {ssh, tag}}`）。`devkit tunnel` 只开同一条连接、不接管任何服务，给本机的数据库客户端或 Nacos 控制台用。
+
 ### Lint：团队规矩的机器检查
 
 `devkit lint`（`make lint` 在本机和 CI 里都会跑）按团队规矩检查服务，不管代码是谁写的。通用规则所有项目一样：不许自己连中间件
@@ -209,9 +213,12 @@ echo 'source "$HOME/.devkit/env"' >> ~/.zshrc    # 或 ~/.bashrc
 | `devkit lint` | 按团队规矩检查服务（`make lint` 跑的就是它），见上文 |
 | `devkit hooks` | 装 git pre-push 钩子：每次推送前跑 `make lint && make test`（和 CI 的 test 阶段一样；`--remove` 卸掉，`git push --no-verify` 跳过一次）。`ngs` 和 `update` 也会装 |
 | `devkit lock` | 把框架文件和生成物设为只读，编辑器会提示（`ngs`、`update`、`make gen` 都会做；`--unlock` 恢复，`--list` 列出文件，`-q` 是 Makefile 传的）。项目的 `kit-common/` 检出也一起锁。只是提醒：lint、钩子和 CI 仍然说了算 |
+| `devkit ai [工具...]` | 写你的 AI 编程工具启动时读的指针文件（CLAUDE.md、.cursorrules……），让它找到 `idl/AGENTS.md`，并把 skill（devkit 自带四个加项目 `idl/skills/` 里的）复制到 `.agents/skills/` 和 `.claude/skills/`。不带参数列出工具；`--all` 全写，`--clean` 删掉 devkit 写过的 |
+| `devkit auth <gitlab-url>` | 在这台机器上保存一个 GitLab 个人访问令牌（交互式输入）：devkit 调 API、git 走 HTTPS、go 拉私有模块都用它（~/.devkit/hosts.yaml、~/.netrc、GOPRIVATE）。令牌要有 api、read_repository、write_repository 权限 |
 | `devkit takeover <服务>` | 从本机接管 dev 的一个服务：只有带 `X-Dev-Tag: <你的 tag>` 的请求会到本机这个实例（IDE 里打断点），其余照常走 dev；一条 ssh 隧道到节点，本地端口在监听时把本机实例注册进 Nacos，写一个标记文件让服务按 dev 配置、经隧道连中间件、不注册、不跑后台任务。停掉就回去。`takeover list` 看谁在接管。需要服务用上 kit-common 的 devroute（只在 `APP_ENV=dev` 开）和节点上的 `takeover` 账号（infra 配） |
 | `devkit tunnel` | 从本机连 dev 的中间件：和 takeover 同一条 ssh、只开正向转发（MySQL 13306、Valkey 16379、Nacos 18848、Kafka 19093……中间件 +10000、服务 +1000），部署用的凭据在终端打印一次、不落盘。在项目目录里跑，连的就是该项目的 dev；Ctrl+C 关闭 |
 | `devkit report` | 这次工作的事实汇总（Markdown，留几处给作者填）：改了哪些仓库和文件、提交与推送状态、IDL 新增的方法 / 结构体 / 错误码、lint 与测试结果、部署后检查有没有改。`--since 24h\|3d\|<提交号>`、`--no-run`、`--json` |
+| `devkit pull <项目>` | 把项目 GitLab 分组里你能看到的全部仓库扁平地克隆到 ./<项目>/ 并把目录设置好（devkit.yaml、go.work、kit-common/、钩子、只读锁、make tools）；再跑一次就是更新。第一次令牌不唯一或分组名和项目名不同时加 `--gitlab`、`--group` |
 | `devkit doctor` | 对照团队版本查看 git、Go、kitex、thriftgo、hz 的状态。`--fix` 安装缺失的工具，并替换版本不对的生成器 |
 | `devkit version` | 报问题时提供版本信息 |
 
