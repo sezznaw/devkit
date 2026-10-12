@@ -237,7 +237,7 @@ sets up: forced command, TCP forwarding, nothing else), tunnels every
 cluster address (service ports + 1000, infrastructure + 10000), keeps
 `<service>/.devkit/takeover.json` fresh and registers the local instance in
 the Nacos group `DEV_TAKEOVER` while its port listens. The service, started
-without `APP_ENV`, finds the marker and runs in takeover mode: the
+with `APP_ENV` unset or `local` (an IDE run configuration, or `make run`) and after the tool, finds the marker, acknowledges it in `.devkit/takeover.json.ack` (the tool registers the local instance only then; otherwise it says why not) and runs in takeover mode: the
 environment's profile, tunnelled addresses, no registration, no consumers,
 no outbox relay, no delayed tasks, no metrics port. Routing lives in
 kit-common (`devroute`): on in `APP_ENV=dev`, off in uat and prod, where

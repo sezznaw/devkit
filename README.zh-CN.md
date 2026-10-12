@@ -151,7 +151,7 @@ IDL 新增的方法 / 结构体 / 错误码、`make lint` / `make test` 结果�
 
 ### 从本机接管 dev 的一个服务
 
-`devkit takeover <服务>` 让你在 IDE 里（打着断点）启动的那个服务成为 dev 上该服务的实例，只接收带 `X-Dev-Tag: <你的 tag>` 的请求，其他请求照常走 dev 自己的实例。工具开一条 ssh 连接到 dev 的节点（infra 仓库配置的 `takeover` 账号：forced command、只许 TCP 转发），把集群里的地址都转到本机（服务端口 +1000、中间件 +10000），持续刷新 `<服务>/.devkit/takeover.json`，并在本地端口监听期间把本机实例注册进 Nacos 的 `DEV_TAKEOVER` 组。服务不设 `APP_ENV` 照常启动，发现标记文件就进入接管模式：用 dev 的配置、隧道地址，不注册、不消费事件、不转发 outbox、不跑延时任务、不开 metrics 端口。路由逻辑在 kit-common（`devroute`）：`APP_ENV=dev` 开，uat 和 prod 关，请求路径上没有它的任何东西。ssh 目标来自 IDL 仓库 devkit.yaml 的 `takeover_ssh`；`~/.devkit/takeover.yaml` 可以按项目覆盖它和 tag（`projects: {<目录名>: {ssh, tag}}`）。`devkit tunnel` 只开同一条连接、不接管任何服务，给本机的数据库客户端或 Nacos 控制台用。
+`devkit takeover <服务>` 让你在 IDE 里（打着断点）启动的那个服务成为 dev 上该服务的实例，只接收带 `X-Dev-Tag: <你的 tag>` 的请求，其他请求照常走 dev 自己的实例。工具开一条 ssh 连接到 dev 的节点（infra 仓库配置的 `takeover` 账号：forced command、只许 TCP 转发），把集群里的地址都转到本机（服务端口 +1000、中间件 +10000），持续刷新 `<服务>/.devkit/takeover.json`，并在本地端口监听期间把本机实例注册进 Nacos 的 `DEV_TAKEOVER` 组。本地服务在工具之后照常启动（IDE 的运行配置不设 `APP_ENV`，或 `make run` 的 local 都行），发现标记文件就进入接管模式并写下 `.devkit/takeover.json.ack`，工具看到这个确认才注册（没看到会说明原因）：用 dev 的配置、隧道地址，不注册、不消费事件、不转发 outbox、不跑延时任务、不开 metrics 端口。路由逻辑在 kit-common（`devroute`）：`APP_ENV=dev` 开，uat 和 prod 关，请求路径上没有它的任何东西。ssh 目标来自 IDL 仓库 devkit.yaml 的 `takeover_ssh`；`~/.devkit/takeover.yaml` 可以按项目覆盖它和 tag（`projects: {<目录名>: {ssh, tag}}`）。`devkit tunnel` 只开同一条连接、不接管任何服务，给本机的数据库客户端或 Nacos 控制台用。
 
 ### Lint：团队规矩的机器检查
 
