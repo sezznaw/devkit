@@ -40,7 +40,7 @@ type Runner struct {
 // Run blocks until the context ends or a signal arrives.
 func Run(ctx context.Context, o Options) error {
 	if !validTag(o.Tag) {
-		return fmt.Errorf("takeover: tag %q must match ^[a-z0-9-]{1,32}$", o.Tag)
+		return fmt.Errorf("takeover: tag %q must match ^[a-z0-9-]{1,32}$ (it defaults to your GitLab user name; pass --tag, or set tag: in ~/.devkit/takeover.yaml)", o.Tag)
 	}
 	r := &Runner{o: o}
 	ctx, stop := signal.NotifyContext(ctx, syscall.SIGINT, syscall.SIGTERM)
@@ -67,7 +67,9 @@ func (r *Runner) up(ctx context.Context) error {
 	if !r.serviceKnown() {
 		return fmt.Errorf("takeover: the environment has no service %q (known: %s)", r.o.Service, r.serviceNames())
 	}
-	EndStale(r.o.SSH, r.o.Service) // a previous run's tunnel would hold our ports
+	if err := EndStale(r.o.SSH, r.o.Service); err != nil {
+		return err
+	}
 	layout, err := Plan(env, PortTaken)
 	if err != nil {
 		return err
@@ -103,19 +105,20 @@ func (r *Runner) up(ctx context.Context) error {
 	if err := r.connectNacos(ctx); err != nil {
 		return err
 	}
-	others, err := r.nacos.Takeovers([]string{r.o.Service})
+	others, err := r.nacos.Takeovers(r.serviceNamesList())
 	if err != nil {
 		return err
 	}
 	host, _ := os.Hostname()
 	for _, t := range others {
-		if t.Tag == r.o.Tag && t.Host != host {
+		if t.Service == r.o.Service && t.Tag == r.o.Tag && t.Host != host {
 			if !r.o.Force {
 				return fmt.Errorf("takeover: %s is already taken over with tag %q by %s on %s since %s; use another --tag, or --force to take it anyway", r.o.Service, t.Tag, t.Owner, t.Host, t.Since)
 			}
 			r.say("WARNING: replacing %s's takeover of %s (tag %s)", t.Owner, r.o.Service, t.Tag)
 		}
 	}
+	r.mergeLocalTakeovers(others)
 	if err := r.writeMarker(); err != nil {
 		return err
 	}
@@ -175,16 +178,21 @@ func (r *Runner) loop(ctx context.Context) error {
 			r.say("stopping")
 			return nil
 		case err := <-r.tunnel.Done():
+			if ctx.Err() != nil { // Ctrl+C reached ssh first; cleanup follows
+				r.say("stopping")
+				return nil
+			}
 			r.say("tunnel dropped (%v); deregistering and reconnecting", err)
 			r.deregister()
+			up = 0 // register again once the tunnel is back and the port still listens
 			if err := r.reconnect(ctx); err != nil {
 				return err
 			}
 		case <-probe.C:
 			if Listening(r.o.LocalPort) {
 				up, down = up+1, 0
-				if up == 2 && !r.active {
-					r.register()
+				if up >= 2 && !r.active && r.nacos != nil {
+					r.register() // first time, after a tunnel drop, or after a failed attempt
 				}
 			} else {
 				down, up = down+1, 0
@@ -252,38 +260,43 @@ func (r *Runner) refresh(ctx context.Context) {
 		r.say("WARNING: refresh: %v", err)
 		return
 	}
-	layout, err := Plan(env, func(p int) bool { return false })
+	// Our own ports count as free, everything else as it is: the plan then
+	// reproduces our allocation and only the targets can differ.
+	ours := map[int]bool{}
+	old := map[string]Forward{}
+	for _, f := range r.layout.Forwards {
+		ours[f.LocalPort] = true
+		old[f.What] = f
+	}
+	layout, err := Plan(env, func(p int) bool { return !ours[p] && PortTaken(p) })
 	if err != nil {
 		r.say("WARNING: refresh: %v", err)
 		return
 	}
-	old := map[int]Forward{}
-	for _, f := range r.layout.Forwards {
-		old[f.LocalPort] = f
-	}
-	for _, f := range layout.Forwards {
-		if prev, ok := old[f.LocalPort]; ok && prev.Target != f.Target && f.Target != "" {
+	for i, f := range layout.Forwards {
+		prev, ok := old[f.What]
+		if !ok || f.Target == "" {
+			continue
+		}
+		if prev.LocalPort != f.LocalPort {
+			// the set of forwards changed shape; keep what the tunnel has
+			layout.Forwards[i] = prev
+			continue
+		}
+		if prev.Target != f.Target {
 			_ = r.tunnel.Cancel(prev)
 			if err := r.tunnel.Forward(f); err != nil {
 				r.say("WARNING: re-point %s: %v", f.What, err)
+				layout.Forwards[i] = prev
 			} else {
 				r.say("%s moved to %s; tunnel re-pointed", f.What, f.Target)
 			}
 		}
 	}
-	// Keep the ports we have (Plan with "nothing taken" may differ from the
-	// first plan only when something moved), but take the new addresses.
-	r.layout.Rewrite = layout.Rewrite
-	r.layout.EnvVars = layout.EnvVars
-	r.layout.Services = layout.Services
+	r.layout = layout
 	r.env = env
 	if list, err := r.nacos.Takeovers(r.serviceNamesList()); err == nil {
-		host, _ := os.Hostname()
-		for _, t := range list {
-			if t.Host == host && t.Service != r.o.Service && t.LocalPort != "" {
-				r.layout.Services[t.Service] = "127.0.0.1:" + t.LocalPort
-			}
-		}
+		r.mergeLocalTakeovers(list)
 	}
 	if err := r.writeMarker(); err != nil {
 		r.say("WARNING: cannot refresh %s: %v", MarkerFile, err)
@@ -305,6 +318,9 @@ func (r *Runner) reconnect(ctx context.Context) error {
 		case <-time.After(wait):
 		}
 		t, taken, err := Open(ctx, r.o.SSH, r.o.Service, r.layout.Forwards, Reverse{NodeIP: r.env.NodeIP, RemotePort: r.remote, LocalPort: r.o.LocalPort})
+		if taken {
+			r.say("reconnect: node port %d is taken now; retrying", r.remote)
+		}
 		if err == nil && !taken {
 			r.tunnel = t
 			if err := r.connectNacos(ctx); err != nil {
@@ -327,11 +343,11 @@ func (r *Runner) cleanup() {
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
+		RemoveMarker(r.o.ServiceDir) // first: it holds credentials and must not outlive us
 		r.deregister()
 		if r.nacos != nil {
 			r.nacos.Close()
 		}
-		RemoveMarker(r.o.ServiceDir)
 		r.tunnel.Close()
 	}()
 	select {
@@ -339,6 +355,17 @@ func (r *Runner) cleanup() {
 	case <-time.After(3 * time.Second):
 	}
 	r.say("done; traffic is back on %s's own instances", r.o.Service)
+}
+
+// mergeLocalTakeovers points the services this machine took over as well
+// at their local instances, so two local services call each other directly.
+func (r *Runner) mergeLocalTakeovers(list []Takeover) {
+	host, _ := os.Hostname()
+	for _, t := range list {
+		if t.Host == host && t.Service != r.o.Service && t.LocalPort != "" {
+			r.layout.Services[t.Service] = "127.0.0.1:" + t.LocalPort
+		}
+	}
 }
 
 func (r *Runner) serviceKnown() bool {

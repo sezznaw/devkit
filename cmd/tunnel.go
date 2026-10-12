@@ -3,6 +3,7 @@ package cmd
 import (
 	"context"
 	"fmt"
+	"net"
 	"os/signal"
 	"sort"
 	"strconv"
@@ -15,7 +16,7 @@ import (
 	"github.com/sezznaw/devkit/internal/ui"
 )
 
-var tunnelAll bool
+var tunnelAll, tunnelReveal bool
 
 var tunnelCmd = &cobra.Command{
 	Use:   "tunnel",
@@ -52,7 +53,7 @@ devkit.yaml (takeover_ssh), so each project reaches its own environment.`,
 			return err
 		}
 		defer t.Close()
-		printTunnel(layout, env, target, tunnelAll)
+		printTunnel(layout, env, target, tunnelAll, tunnelReveal)
 		fmt.Printf("%s tunnel is up; Ctrl+C closes it. %s\n", ui.Stdout.Success("✓"), ui.Stdout.Dim("Credentials are shown once and written nowhere."))
 		select {
 		case <-ctx.Done():
@@ -69,7 +70,23 @@ devkit.yaml (takeover_ssh), so each project reaches its own environment.`,
 // command, then the credentials whose variable names mention that
 // middleware. Business services and the rest of the cluster's ports are
 // forwarded too but only counted; --all lists everything and every variable.
-func printTunnel(l *takeover.Layout, env *takeover.Env, target string, all bool) {
+func printTunnel(l *takeover.Layout, env *takeover.Env, target string, all, reveal bool) {
+	podIP := map[string]bool{}
+	for _, ep := range env.Infra {
+		for _, p := range ep.Pods {
+			podIP[p.IP] = true
+		}
+	}
+	isPod := func(target string) bool {
+		h, _, err := net.SplitHostPort(target)
+		return err == nil && podIP[h]
+	}
+	show := func(k, v string) string {
+		if reveal || !secretLike(k) {
+			return v
+		}
+		return maskValue(v)
+	}
 	st := ui.Stdout
 	services := map[string]bool{}
 	for _, s := range env.Services {
@@ -84,7 +101,7 @@ func printTunnel(l *takeover.Layout, env *takeover.Env, target string, all bool)
 	}
 	clusterIP := map[string]bool{}
 	for _, f := range l.Forwards {
-		if !strings.HasPrefix(f.Target, "10.42.") {
+		if f.Target != "" && !isPod(f.Target) {
 			clusterIP[stem(f.What)] = true
 		}
 	}
@@ -95,7 +112,7 @@ func printTunnel(l *takeover.Layout, env *takeover.Env, target string, all bool)
 		if f.Target == "" {
 			continue
 		}
-		twin := strings.HasPrefix(f.Target, "10.42.") && clusterIP[stem(f.What)] && !strings.Contains(f.What, "mysql") && !strings.Contains(f.What, "valkey") && !strings.Contains(f.What, "redpanda")
+		twin := isPod(f.Target) && clusterIP[stem(f.What)] && !strings.Contains(f.What, "mysql") && !strings.Contains(f.What, "valkey") && !strings.Contains(f.What, "redpanda")
 		// Default view: what a person connects a client to (MySQL, Redis,
 		// Nacos, Kafka, StarRocks, S3). Tempo, Centrifugo, the services:
 		// things services talk to, --all.
@@ -120,10 +137,13 @@ func printTunnel(l *takeover.Layout, env *takeover.Env, target string, all bool)
 		for _, k := range sortedKeys(l.EnvVars) {
 			if !used[k] && relatedVar(k, f.What) {
 				used[k] = true
-				fmt.Printf("  %s  %s\n", st.Dim(fmt.Sprintf("%-40s", k)), l.EnvVars[k])
+				fmt.Printf("  %s  %s\n", st.Dim(fmt.Sprintf("%-40s", k)), show(k, l.EnvVars[k]))
 			}
 		}
 		fmt.Println()
+	}
+	if !reveal {
+		fmt.Println(st.Dim("passwords and keys are masked; --reveal prints them (they then sit in your terminal's scrollback)"))
 	}
 	if all {
 		var rest []string
@@ -135,7 +155,7 @@ func printTunnel(l *takeover.Layout, env *takeover.Env, target string, all bool)
 		if len(rest) > 0 {
 			fmt.Printf("%s\n", st.Cyan(st.Bold("other settings")))
 			for _, k := range rest {
-				fmt.Printf("  %s  %s\n", st.Dim(fmt.Sprintf("%-40s", k)), l.EnvVars[k])
+				fmt.Printf("  %s  %s\n", st.Dim(fmt.Sprintf("%-40s", k)), show(k, l.EnvVars[k]))
 			}
 			fmt.Println()
 		}
@@ -244,6 +264,7 @@ func howTo(f takeover.Forward) string {
 func init() {
 	tunnelCmd.Flags().StringVar(&takeoverFlags.ssh, "ssh", "", "ssh target of the node (default: devkit.yaml takeover_ssh)")
 	tunnelCmd.Flags().BoolVar(&tunnelAll, "all", false, "list every forwarded port, not only the ones a client connects to")
+	tunnelCmd.Flags().BoolVar(&tunnelReveal, "reveal", false, "print passwords and keys instead of masking them")
 	rootCmd.AddCommand(tunnelCmd)
 }
 
@@ -256,4 +277,23 @@ func stem(what string) string {
 		name = name[:i]
 	}
 	return name + " " + port
+}
+
+// secretLike says whether an environment variable holds a credential.
+func secretLike(k string) bool {
+	u := strings.ToUpper(k)
+	for _, w := range []string{"PASSWORD", "SECRET", "TOKEN", "KEY", "PASS"} {
+		if strings.Contains(u, w) {
+			return true
+		}
+	}
+	return false
+}
+
+// maskValue keeps the first two characters so two values can be told apart.
+func maskValue(v string) string {
+	if len(v) <= 4 {
+		return "****"
+	}
+	return v[:2] + strings.Repeat("*", 8)
 }

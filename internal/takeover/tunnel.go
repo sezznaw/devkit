@@ -7,8 +7,10 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"strconv"
 	"strings"
+	"syscall"
 	"time"
 )
 
@@ -45,8 +47,11 @@ const errRemotePortTaken = "remote port forwarding failed"
 func Open(ctx context.Context, target, name string, forwards []Forward, rev Reverse) (t *Tunnel, taken bool, err error) {
 	// One control socket per service, not per process: a tool that died
 	// without cleaning up (kill -9) leaves its ssh behind, and the next run
-	// for the same service finds and ends it here.
-	sock := EndStale(target, name)
+	// for the same service finds and ends it here; one still alive is refused.
+	if err := EndStale(target, name); err != nil {
+		return nil, false, err
+	}
+	sock := sockPath(name)
 	args := []string{"-N", "-M", "-S", sock,
 		"-o", "ControlPersist=no", "-o", "ExitOnForwardFailure=yes",
 		"-o", "ServerAliveInterval=5", "-o", "ServerAliveCountMax=2",
@@ -64,6 +69,9 @@ func Open(ctx context.Context, target, name string, forwards []Forward, rev Reve
 	t = &Tunnel{Target: target, sock: sock, done: make(chan error, 1)}
 	t.cmd = exec.Command("ssh", args...)
 	t.cmd.Stderr = &t.stderr
+	// Its own process group: a Ctrl+C in the terminal must reach devkit,
+	// which deregisters and removes the marker, not ssh first.
+	t.cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
 	if err := t.cmd.Start(); err != nil {
 		return nil, false, fmt.Errorf("takeover: start ssh: %w", err)
 	}
@@ -91,17 +99,47 @@ func Open(ctx context.Context, target, name string, forwards []Forward, rev Reve
 	return nil, false, fmt.Errorf("takeover: ssh %s did not come up in 20s\n%s", target, strings.TrimSpace(t.stderr.String()))
 }
 
+func sockPath(name string) string {
+	return filepath.Join(os.TempDir(), fmt.Sprintf("devkit-takeover-%s.sock", name))
+}
+
+var masterPID = regexp.MustCompile(`pid=(\d+)`)
+
 // EndStale ends the ssh a previous run for name left behind (kill -9 does
-// not clean up) and returns the control socket path for this one. Run it
+// not clean up). A master whose devkit is still alive is not stale: then
+// another devkit is running for the same name and this one refuses. Run it
 // before planning ports, so the old forwards do not count as taken.
-func EndStale(target, name string) string {
-	sock := filepath.Join(os.TempDir(), fmt.Sprintf("devkit-takeover-%s.sock", name))
-	if _, err := os.Stat(sock); err == nil {
+func EndStale(target, name string) error {
+	sock := sockPath(name)
+	if _, err := os.Stat(sock); err != nil {
+		return nil
+	}
+	out, err := exec.Command("ssh", "-S", sock, "-O", "check", target).CombinedOutput()
+	if err == nil {
+		if m := masterPID.FindStringSubmatch(string(out)); m != nil {
+			if pid, _ := strconv.Atoi(m[1]); pid > 0 && parentAlive(pid) {
+				return fmt.Errorf("takeover: another devkit %s is running on this machine (ssh pid %d); stop it first", name, pid)
+			}
+		}
 		_ = exec.Command("ssh", "-S", sock, "-O", "exit", target).Run()
 		time.Sleep(300 * time.Millisecond)
 	}
 	os.Remove(sock)
-	return sock
+	return nil
+}
+
+// parentAlive says whether the parent of pid (the devkit that started this
+// ssh) is still running; an orphaned ssh has init as parent.
+func parentAlive(pid int) bool {
+	out, err := exec.Command("ps", "-o", "ppid=", "-p", strconv.Itoa(pid)).Output()
+	if err != nil {
+		return false
+	}
+	ppid, _ := strconv.Atoi(strings.TrimSpace(string(out)))
+	if ppid <= 1 {
+		return false
+	}
+	return syscall.Kill(ppid, 0) == nil
 }
 
 // alive asks the control master.
@@ -157,7 +195,7 @@ func FetchEnv(ctx context.Context, target, service string) (*Env, error) {
 	}
 	var env Env
 	if err := decodeJSON(out, &env); err != nil {
-		return nil, fmt.Errorf("takeover: the node answered with something that is not the environment description: %w\n%s", err, firstLines(string(out), 5))
+		return nil, fmt.Errorf("takeover: the node answered with something that is not the environment description (%d bytes, %w); run `ssh %s` by hand and look at its first line (not shown here: it may hold credentials)", len(out), err, target)
 	}
 	if env.Version != 1 {
 		return nil, fmt.Errorf("takeover: node side speaks version %d, this devkit expects 1; update devkit on one side", env.Version)
@@ -168,14 +206,6 @@ func FetchEnv(ctx context.Context, target, service string) (*Env, error) {
 		}
 	}
 	return &env, nil
-}
-
-func firstLines(s string, n int) string {
-	lines := strings.Split(strings.TrimSpace(s), "\n")
-	if len(lines) > n {
-		lines = lines[:n]
-	}
-	return strings.Join(lines, "\n")
 }
 
 // PortOf parses a service.addr ("8100", ":8100", "0.0.0.0:8100").
