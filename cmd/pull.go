@@ -3,6 +3,7 @@ package cmd
 import (
 	"context"
 	"fmt"
+	"github.com/sezznaw/devkit/internal/manifest"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -177,9 +178,14 @@ Run it again any time: new repositories are cloned, the others fast-forward
 				logf("AI skills refreshed from %s (%d written, %d removed)", workspace.AISkillsSource, len(w), len(r))
 			}
 			if !pullFlags.noTools {
-				logf("make tools (the generators, once for the whole project) ...")
-				if out, err := run(ctx, services[0], "make", "tools"); err != nil {
-					logf("warning: make tools failed: %v\n%s", err, out)
+				// Each template has its own generators (kitex and thriftgo for
+				// an RPC service, hz and the swagger plugin for a gateway), so
+				// make tools runs once per template present, not once overall.
+				for _, root := range toolsRoots(services) {
+					logf("make tools in %s (the generators of its template, once for the whole project) ...", filepath.Base(root))
+					if out, err := run(ctx, root, "make", "tools"); err != nil {
+						logf("warning: make tools failed: %v\n%s", err, out)
+					}
 				}
 			}
 		}
@@ -188,6 +194,29 @@ Run it again any time: new repositories are cloned, the others fast-forward
 		fmt.Printf("        then read %s yourself once: it is the whole workflow\n", filepath.Join(dir, workspace.AIRulesSource))
 		return nil
 	},
+}
+
+// toolsRoots picks one service per template component (kitex-service,
+// hertz-service, ...) so that make tools installs every generator the
+// project needs. A service without a readable manifest counts as its own kind.
+func toolsRoots(services []string) []string {
+	seen := map[string]bool{}
+	var out []string
+	for _, root := range services {
+		kind := root
+		if m, err := manifest.Load(root); err == nil {
+			for name := range m.Components {
+				kind = name
+				break
+			}
+		}
+		if seen[kind] {
+			continue
+		}
+		seen[kind] = true
+		out = append(out, root)
+	}
+	return out
 }
 
 func hostNames(s *hosts.Store) []string {
