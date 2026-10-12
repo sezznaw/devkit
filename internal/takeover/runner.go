@@ -35,6 +35,9 @@ type Runner struct {
 	nacos  *Nacos
 	remote int // the node port of the reverse forward
 	active bool
+
+	started  time.Time // when the marker was first written; an ack must be newer
+	ackNoted string    // the last "not in takeover mode" reason said, to say it once
 }
 
 // Run blocks until the context ends or a signal arrives.
@@ -42,7 +45,7 @@ func Run(ctx context.Context, o Options) error {
 	if !validTag(o.Tag) {
 		return fmt.Errorf("takeover: tag %q must match ^[a-z0-9-]{1,32}$ (it defaults to your GitLab user name; pass --tag, or set tag: in ~/.devkit/takeover.yaml)", o.Tag)
 	}
-	r := &Runner{o: o}
+	r := &Runner{o: o, started: time.Now().Add(-time.Second)} // a second of slack for the clock of a file system
 	ctx, stop := signal.NotifyContext(ctx, syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 	defer r.cleanup()
@@ -192,7 +195,15 @@ func (r *Runner) loop(ctx context.Context) error {
 			if Listening(r.o.LocalPort) {
 				up, down = up+1, 0
 				if up >= 2 && !r.active && r.nacos != nil {
-					r.register() // first time, after a tunnel drop, or after a failed attempt
+					if _, err := ReadAck(r.o.ServiceDir, r.o.Service, r.o.Tag, r.started); err != nil {
+						if r.ackNoted != err.Error() {
+							r.ackNoted = err.Error()
+							r.say("WARNING: something listens on :%d but is NOT registered: %v. It would answer the environment's tagged requests from your local database. Start the service after this tool, with APP_ENV unset or local (make run, or the IDE's Debug), on kit-common >= v0.49.5; its second log line must read TAKEOVER MODE.", r.o.LocalPort, err)
+						}
+					} else {
+						r.ackNoted = ""
+						r.register() // first time, after a tunnel drop, or after a failed attempt
+					}
 				}
 			} else {
 				down, up = down+1, 0
