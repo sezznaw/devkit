@@ -57,3 +57,33 @@ func TestParseThriftDiff(t *testing.T) {
 		t.Errorf("flags: %+v", ch.Flags)
 	}
 }
+
+// The template's /ping sample is @public by design: a new gateway must not
+// raise "confirm this @public with somebody". An @public on a real method
+// in the same file still does.
+func TestPublicOnPingIsNotFlagged(t *testing.T) {
+	diff := `diff --git a/ser-x-api/system.thrift b/ser-x-api/system.thrift
+--- a/ser-x-api/system.thrift
++++ b/ser-x-api/system.thrift
+@@ -0,0 +1,6 @@
++service SystemService {
++    // 健康检查
++    // @public
++    Pong Ping(1: PingReq req) (api.post="/ping")
++}
+diff --git a/ser-x-api/member.thrift b/ser-x-api/member.thrift
+--- a/ser-x-api/member.thrift
++++ b/ser-x-api/member.thrift
+@@ -10,0 +11,3 @@
++    // 注册
++    // @public
++    common.Empty Register(1: RegisterReq req) (api.post="/v1/member/register")
+`
+	ch := parseThriftDiff(diff, nil)
+	if len(ch.Methods) != 2 {
+		t.Fatalf("methods: %+v", ch.Methods)
+	}
+	if len(ch.Flags) != 1 || ch.Flags[0].File != "ser-x-api/member.thrift" {
+		t.Errorf("flags (only Register's @public): %+v", ch.Flags)
+	}
+}

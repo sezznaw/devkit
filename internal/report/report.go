@@ -300,7 +300,8 @@ func inspect(rp *Repo, author string, opt Options) error {
 		if len(parts) != 3 {
 			continue
 		}
-		c := Commit{Hash: parts[1], Subject: parts[2]}
+		// A subject with broken UTF-8 (a shell ate a byte of a wide character) must not break the Markdown.
+		c := Commit{Hash: parts[1], Subject: strings.ToValidUTF8(parts[2], "\uFFFD")}
 		if remoteBranch != "" {
 			_, err := git(rp.path, "merge-base", "--is-ancestor", parts[0], remoteBranch)
 			c.Pushed = err == nil

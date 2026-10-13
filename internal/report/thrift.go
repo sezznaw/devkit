@@ -61,6 +61,7 @@ func parseThriftDiff(diff string, serviceOf func(file, method string) string) *I
 	ch := &IDLChanges{}
 	file := ""
 	lastComment := ""
+	pendingFlags := 0 // annotations seen since the last declaration; they belong to the next method
 	for _, line := range strings.Split(diff, "\n") {
 		if m := reDiffFile.FindStringSubmatch(line); m != nil {
 			file = m[1]
@@ -77,6 +78,7 @@ func parseThriftDiff(diff string, serviceOf func(file, method string) string) *I
 			lastComment = m[1]
 			if f := reFlag.FindStringSubmatch(line); f != nil {
 				ch.Flags = append(ch.Flags, IDLItem{File: file, Kind: "annotation", Name: strings.TrimSpace(f[1])})
+				pendingFlags++
 			}
 			continue
 		}
@@ -91,6 +93,7 @@ func parseThriftDiff(diff string, serviceOf func(file, method string) string) *I
 				ch.Removed = append(ch.Removed, IDLItem{File: file, Kind: "const", Name: m[2]})
 			}
 			lastComment = ""
+			pendingFlags = 0
 			continue
 		}
 		if m := reStruct.FindStringSubmatch(line); m != nil {
@@ -100,6 +103,7 @@ func parseThriftDiff(diff string, serviceOf func(file, method string) string) *I
 				ch.Removed = append(ch.Removed, IDLItem{File: file, Kind: m[2], Name: m[3]})
 			}
 			lastComment = ""
+			pendingFlags = 0
 			continue
 		}
 		if m := reMethod.FindStringSubmatch(line); m != nil && !keywords[m[2]] && !strings.HasPrefix(strings.TrimSpace(line[1:]), "service") {
@@ -112,14 +116,21 @@ func parseThriftDiff(diff string, serviceOf func(file, method string) string) *I
 					meth.Service = serviceOf(file, m[3])
 				}
 				ch.Methods = append(ch.Methods, meth)
+				// Ping is the template's sample: @public on it is by design
+				// and not something to confirm with anybody.
+				if m[3] == "Ping" && pendingFlags > 0 {
+					ch.Flags = ch.Flags[:len(ch.Flags)-pendingFlags]
+				}
 			} else {
 				ch.Removed = append(ch.Removed, IDLItem{File: file, Kind: "method", Name: m[3]})
 			}
 			lastComment = ""
+			pendingFlags = 0
 			continue
 		}
 		if strings.HasPrefix(line, "+") || strings.HasPrefix(line, "-") {
 			lastComment = ""
+			pendingFlags = 0
 		}
 	}
 	// Something removed here and added somewhere (edited signature, or moved
