@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 	"time"
+	"unicode/utf8"
 )
 
 func sh(t *testing.T, dir string, args ...string) {
@@ -73,5 +74,19 @@ func TestCollectSeesCommitsUncommittedAndUntracked(t *testing.T) {
 	md := r.Markdown()
 	if !strings.Contains(md, "`errors/m.thrift` 新（未提交）") || !strings.Contains(md, "新错误码 `2001 NotFound`：不存在") {
 		t.Errorf("markdown:\n%s", md)
+	}
+}
+
+func TestCleanSubject(t *testing.T) {
+	// "（rpc 8160）" after a shell ate the first byte of the closing paren.
+	got := cleanSubject("ser-game \u7684 dev \u90e8\u7f72\uff08rpc \u00bc\u0089")
+	if strings.ContainsRune(got, '\u0089') || !strings.HasSuffix(got, "\u00bc\uFFFD") {
+		t.Errorf("control character kept: %q", got)
+	}
+	if got := cleanSubject("plain\tsubject \u6587\u5b57"); got != "plain\tsubject \u6587\u5b57" {
+		t.Errorf("clean subject changed: %q", got)
+	}
+	if got := cleanSubject("bad \xff byte"); !strings.Contains(got, "\uFFFD") || !utf8.ValidString(got) {
+		t.Errorf("invalid utf-8 kept: %q", got)
 	}
 }

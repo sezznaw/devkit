@@ -18,6 +18,7 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"unicode"
 
 	"github.com/sezznaw/devkit/internal/manifest"
 	"github.com/sezznaw/devkit/internal/workspace"
@@ -300,8 +301,7 @@ func inspect(rp *Repo, author string, opt Options) error {
 		if len(parts) != 3 {
 			continue
 		}
-		// A subject with broken UTF-8 (a shell ate a byte of a wide character) must not break the Markdown.
-		c := Commit{Hash: parts[1], Subject: strings.ToValidUTF8(parts[2], "\uFFFD")}
+		c := Commit{Hash: parts[1], Subject: cleanSubject(parts[2])}
 		if remoteBranch != "" {
 			_, err := git(rp.path, "merge-base", "--is-ancestor", parts[0], remoteBranch)
 			c.Pushed = err == nil
@@ -431,4 +431,17 @@ func runMake(rp *Repo, target string) Check {
 		}
 	}
 	return c
+}
+
+// cleanSubject repairs a commit subject so it cannot break the Markdown or
+// the terminal: invalid UTF-8 and control characters (what is left when a
+// shell ate one byte of a wide character) become U+FFFD.
+func cleanSubject(s string) string {
+	s = strings.ToValidUTF8(s, "\uFFFD")
+	return strings.Map(func(r rune) rune {
+		if r != '\t' && unicode.IsControl(r) {
+			return '\uFFFD'
+		}
+		return r
+	}, s)
 }
