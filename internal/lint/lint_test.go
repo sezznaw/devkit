@@ -18,6 +18,10 @@ func f() { fmt.Println("x"); zlog.Info("ok") }
 type Bet struct { Amount float64; Odds float64 }
 var p = rt.Provider("pay")
 // fmt.Println in a comment is fine
+const ddl = "CREATE TABLE IF NOT EXISTS bet (id BIGINT)"
+func m(db *gorm.DB) { _ = db.AutoMigrate(&Bet{}) }
+func ok(rt *kitexx.Runtime) { _ = rt.AutoMigrate(Bet{}) }
+func (Bet) TableName() string { return "bet" }
 `
 	os.WriteFile(filepath.Join(dir, "a.go"), []byte(src), 0o644)
 	mg, mn := moneyPattern([]string{"odds"})
@@ -30,7 +34,7 @@ var p = rt.Provider("pay")
 		rules = append(rules, f.Rule)
 	}
 	got := strings.Join(rules, ",")
-	for _, want := range []string{"no-direct-middleware", "use-zlog", "no-float-money", "vendor-only"} {
+	for _, want := range []string{"no-direct-middleware", "use-zlog", "no-float-money", "vendor-only", "schema-in-lib"} {
 		if !strings.Contains(got, want) {
 			t.Errorf("missing %s in %s", want, got)
 		}
@@ -40,6 +44,9 @@ var p = rt.Provider("pay")
 	}
 	if strings.Count(got, "no-float-money") != 1 {
 		t.Errorf("one finding per line: %s", got)
+	}
+	if strings.Count(got, "schema-in-lib") != 3 {
+		t.Errorf("DDL string, db.AutoMigrate and TableName are findings, rt.AutoMigrate is not: %s", got)
 	}
 	_ = mn
 	if fs2, _ := checkGoFile(dir, "a.go", goCheck{isVendor: true, vendorRule: true, moneyGo: mg}); strings.Contains(joinRules(fs2), "vendor-only") {

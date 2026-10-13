@@ -276,7 +276,10 @@ topic (`handler-split`: handler.go holds struct, New and Ping; at most
 untouched, the common library at the
 team's version in go.mod (`common-version`) and the project's `kit-common/`
 checkout clean (`common-checkout`: go.work makes local builds use it), zlog
-for logging, `idl.lock` current. The project's own rules live in the IDL repository's `devkit.yaml`
+for logging, `idl.lock` current, and the schema where the project keeps it
+(`schema-in-lib`: no DDL strings, no `db.AutoMigrate`, no `TableName()`
+structs in a service; the table is a struct in the project's lib and
+`rt.AutoMigrate` applies it). The project's own rules live in the IDL repository's `devkit.yaml`
 (so the laptop and CI read one file): `lint.vendor_service` (third-party
 calls only there), `lint.money_words` (extra money field names),
 `lint.errors_dir` + `lint.error_ranges` (business codes are declared once, in

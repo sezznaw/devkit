@@ -164,7 +164,7 @@ handler 和 repo 里不放 `sync.Mutex`（`mutex`，只锁得住一个副本）�
 网关 handler 不直接 `c.JSON`（`envelope-write`）、网关一个领域一个文件，文件名、namespace、路径段三者一致且只 include common（`domain-file`、`domain-path`、`domain-include`）、
 分页用 `common.PageReq` / `common.PageInfo`，不许裸的 page / page_size / total 字段（`paging`）、业务错误写 `errcode.Err(code)`，不手写消息字符串（`error-msg`）、
 RPC handler 按主题分文件（`handler-split`：handler.go 只放结构体、New、Ping；一个文件最多 `lint.handler_methods` 个 RPC 方法，默认 8）、框架文件不许改（`framework-file`）、
-go.mod 里公共库的版本等于模板定的版本（`common-version`）、项目的 `kit-common/` 检出必须干净（`common-checkout`：go.work 让本机编译用的就是它）、日志走 zlog（`use-zlog`）、`idl.lock` 要新（`idl-lock`）。
+go.mod 里公共库的版本等于模板定的版本（`common-version`）、项目的 `kit-common/` 检出必须干净（`common-checkout`：go.work 让本机编译用的就是它）、日志走 zlog（`use-zlog`）、`idl.lock` 要新（`idl-lock`）、表结构放项目的 lib 里（`schema-in-lib`：服务里不写 DDL 字串、不自己 `db.AutoMigrate`、不定义带 `TableName()` 的结构体，表是 lib/model/mysql 的结构体，由 `rt.AutoMigrate` 应用）。
 项目自己的规则写在 IDL 仓库的 `devkit.yaml`（本机和 CI 读同一份）：`lint.vendor_service`（调第三方只能在它：`vendor-only`）、`lint.report_service`（只有它能开报表库：`report-only`）、
 `lint.money_words`（追加金额字段词）、`lint.errors_dir` + `lint.error_ranges`（错误码只在 Thrift 文件里按领域声明一次，每个码一行说明、落在本领域的号段内，代码里用生成的 `errcode` 常量：
 `error-code`、`error-dup`、`error-range`、`error-comment`）、`lint.handler_methods`、`lint.disable`。每条输出都写了该怎么改；有问题退出码 1，CI 停下。某一行确属误报可加 `//devkit:lint-ignore <规则>`。`idl-lock` 规则堵住分仓库的"先推 IDL"陷阱：`make gen` 写 `idl.lock`，

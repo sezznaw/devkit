@@ -205,6 +205,10 @@ var goPatterns = []pattern{
 	{regexp.MustCompile(`\bgocron\.|\bcron\.New\(|\btime\.NewTicker\(`), "no-direct-middleware", "do not schedule work yourself: a job in app/jobs.go (make jobs / make job NAME=...)"},
 	{regexp.MustCompile(`\bserver\.WithLimit\(|\bserver\.WithLimitReporter\(|\blimit\.Option\{`), "no-direct-middleware", "do not install a Kitex limiter yourself: the limits: section in conf (max_in_flight, max_qps, max_connections) refuses with code 5003 and counts rpc_server_rejected_total"},
 	{regexp.MustCompile(`\bfmt\.Print(ln|f)?\(|\blog\.(Print|Printf|Println|Fatal|Fatalf|Fatalln|Panic|Panicf)\(`), "use-zlog", "log through zlog (zlog.Ctx(ctx).Info(...)), which carries the trace_id; not fmt / log"},
+	// The schema lives in the project's lib/model/mysql and the owning service applies it with rt.AutoMigrate.
+	{regexp.MustCompile(`(?i)\bCREATE\s+TABLE\b|\bALTER\s+TABLE\b|\bDROP\s+TABLE\b`), "schema-in-lib", "no DDL in a service: the table is a struct in the project's lib/model/mysql (column and type on every field) and app.Setup calls rt.AutoMigrate(model.X{}) for the tables this service owns"},
+	{regexp.MustCompile(`([^t]|[^r]t)\.AutoMigrate\(|\.Migrator\(\)`), "schema-in-lib", "migrate through rt.AutoMigrate(model.X{}, ...) (Redis lock, explicit types, logged differences, off in uat/prod), not GORM's AutoMigrate / Migrator directly"},
+	{regexp.MustCompile(`^func \(\w+ ?\*?\w+\) TableName\(\) string`), "schema-in-lib", "a table struct belongs in the project's lib/model/mysql (one file per table, TableName there); the service imports it instead of defining its own"},
 }
 
 var vendorOnly = regexp.MustCompile(`\.Provider\(|\bwebhookx\.`)
