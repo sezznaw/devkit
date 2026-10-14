@@ -213,8 +213,11 @@ versioned with the framework they describe. A project adds its own under
 `idl/skills/<name>/SKILL.md` (one with a built-in's name replaces it).
 `devkit ai <tool>` copies both to `.agents/skills/` (Codex, Copilot,
 Cursor, Gemini CLI, Windsurf) and `.claude/skills/` (Claude Code), where
-the tools load a skill when its task comes up; `devkit pull` refreshes the
-copies, `devkit ai --clean` removes them. Edit the sources, never the
+the tools load a skill when its task comes up; `devkit pull` and
+`devkit update` refresh the copies, `devkit ai --clean` removes them. The
+built-in skills come from the devkit binary: when it is older than the
+team's `DEVKIT_VERSION`, those two commands leave the copies alone and say
+to run `devkit self-update` first. Edit the sources, never the
 copies.
 
 `devkit report` is the finishing step: it collects the facts of a piece of
@@ -349,7 +352,7 @@ echo 'source "$HOME/.devkit/env"' >> ~/.zshrc    # or ~/.bashrc
 |---------|------------------|
 | `devkit ngs <service>` | create an RPC service (Kitex) in the current project directory |
 | `devkit nas <service>` | create an API service (HTTP, Hertz) in the current project directory |
-| `devkit update` | upgrade the devkit-managed files (Makefile, CI, Dockerfile, `main.go`, `conf/README*.md`) to the latest template. Inside a service it updates that service; in the project directory it updates every service. `--check` only shows versions and local changes |
+| `devkit update` | upgrade the devkit-managed files (Makefile, CI, Dockerfile, `main.go`, `conf/README*.md`) to the latest template. Inside a service it updates that service; in the project directory it updates every service. It also refreshes the skill copies `devkit ai` installed. `--check` only shows versions and local changes |
 | `devkit self-update` | upgrade devkit itself. `--check` only reports |
 | `devkit lint` | check the service against the team's rules (what `make lint` runs); see above |
 | `devkit hooks` | install the git pre-push hook that runs `make lint && make test` before every push (what CI's test stage runs; `--remove` to drop it, `git push --no-verify` to skip once). `ngs` and `update` install it too |

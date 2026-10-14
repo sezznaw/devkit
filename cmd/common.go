@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/sezznaw/devkit/internal/buildinfo"
 	"github.com/sezznaw/devkit/internal/config"
 	"github.com/sezznaw/devkit/internal/installer"
 	"github.com/sezznaw/devkit/internal/manifest"
@@ -56,6 +57,8 @@ func newInstallerAt(root string, force, skipHooks bool) (*installer.Installer, e
 type teamValues struct {
 	CommonVersion string
 	GoVersion     string
+	// DevkitVersion is the devkit the team's Makefiles run (DEVKIT_VERSION).
+	DevkitVersion string
 }
 
 func teamValuesOf(comp *registry.Component) teamValues {
@@ -66,7 +69,44 @@ func teamValuesOf(comp *registry.Component) teamValues {
 	if v := comp.VarByName("GoVersion"); v != nil {
 		t.GoVersion = v.Default
 	}
+	if v := comp.VarByName("DevkitVersion"); v != nil {
+		t.DevkitVersion = v.Default
+	}
 	return t
+}
+
+// refreshSkills brings the project's copies of the AI skills (the ones
+// devkit ai put in .agents/skills and .claude/skills) up to date: the
+// project's own from idl/skills and the built-in ones from this binary.
+// Because the built-in ones come from the binary, a devkit older than the
+// team's would write older steps back over the copies; then the copies are
+// left alone and the person is told to self-update. teamDevkit may be empty
+// (the registry could not be read): the copies are refreshed without the check.
+func refreshSkills(project, teamDevkit string, log func(string, ...any)) {
+	if project == "" {
+		return
+	}
+	if devkitBehind(buildinfo.Version, teamDevkit) {
+		log("warning: this devkit is %s, the team's is %s: run `devkit self-update`, then this command again. The built-in AI skills come from the devkit binary, so %s were left as they are", buildinfo.Version, teamDevkit, strings.Join(workspace.AISkillTargets, " and "))
+		return
+	}
+	w, r, err := workspace.RefreshAISkills(project)
+	switch {
+	case err != nil:
+		log("warning: skills: %v", err)
+	case len(w)+len(r) > 0:
+		log("AI skills refreshed in %s (%d written, %d removed)", strings.Join(workspace.AISkillTargets, " and "), len(w), len(r))
+	}
+}
+
+// devkitBehind reports whether the running devkit is older than the team's.
+// A build without a release version (go build, "dev") is never behind.
+func devkitBehind(have, team string) bool {
+	have = strings.TrimPrefix(strings.TrimSpace(have), "v")
+	if team == "" || have == "" || have[0] < '0' || have[0] > '9' {
+		return false
+	}
+	return registry.CompareVersions(have, team) < 0
 }
 
 // syncProject keeps the two things in the project directory that make the

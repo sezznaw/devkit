@@ -44,7 +44,12 @@ Files you have not touched are overwritten. Files you modified are left in
 place and the incoming version is written next to them with a .new suffix so
 you can merge by hand; pass --force to overwrite them instead (a .bak copy is
 kept). Files the new version no longer produces are deleted unless modified.
-Files you own (go.mod, idl.mk, conf/, handler/) are never touched.`,
+Files you own (go.mod, idl.mk, conf/, handler/) are never touched.
+
+The project's copies of the AI skills (.agents/skills, .claude/skills, written
+by devkit ai) are refreshed as well. The built-in skills come from the devkit
+binary: if it is older than the team's devkit, the copies are left alone and
+you are told to run devkit self-update first.`,
 	Example: `  devkit update --check      # what would change, for one service or all of them
   devkit update
   devkit update --force --set CI=gitlab`,
@@ -229,6 +234,8 @@ func teamFor(cmd *cobra.Command, root string) (teamValues, bool) {
 func syncAfterUpdate(cmd *cobra.Command, roots []string, single bool) {
 	project := projectOf(roots, single)
 	team, ok := teamFor(cmd, roots[0])
+	// The AI skills follow the team too; they used to change only on devkit pull.
+	refreshSkills(project, team.DevkitVersion, logf)
 	cfg, err := config.Load()
 	if project == "" || !ok || err != nil {
 		return

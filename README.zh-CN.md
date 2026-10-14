@@ -143,7 +143,7 @@ gemini、windsurf、junie、kiro、trae、cline、roo、augment、continue、lin
 AGENTS.md 放项目的规矩；常做的几种任务的**分步做法**是 skill（开放的 Agent Skills 格式：一个目录一个 `SKILL.md`，开头 `name`、`description`，正文是步骤）。
 框架的四个随 devkit 自带：`devkit-rpc-method`、`devkit-gateway-api`、`devkit-gateway-domain`、`devkit-finish`，所有项目一样，和它们描述的框架同一个版本；
 项目自己的放 `idl/skills/<名字>/SKILL.md`（和自带同名的覆盖它）。`devkit ai <工具>` 把两者一起复制到 `.agents/skills/`（Codex、Copilot、Cursor、Gemini CLI、Windsurf 读这里）和
-`.claude/skills/`（Claude Code 读这里），工具在做那种任务时自动加载；`devkit pull` 刷新副本，`devkit ai --clean` 删掉。改源文件，不改副本。
+`.claude/skills/`（Claude Code 读这里），工具在做那种任务时自动加载；`devkit pull` 和 `devkit update` 刷新副本，`devkit ai --clean` 删掉。自带的 skill 在 devkit 二进制里：本机 devkit 比团队的 `DEVKIT_VERSION` 旧时，这两条命令不动副本，提示先 `devkit self-update`。改源文件，不改副本。
 
 `devkit report` 是收尾那一步：在项目目录里跑，从 git 和构建里取出这次工作的事实——改了哪些仓库、提交和是否已推送、改了哪些文件（改到框架文件会标出）、
 IDL 新增的方法 / 结构体 / 错误码、`make lint` / `make test` 结果、`app/verify.go`（部署后检查）有没有改——输出一份 Markdown 汇报，
@@ -208,7 +208,7 @@ echo 'source "$HOME/.devkit/env"' >> ~/.zshrc    # 或 ~/.bashrc
 |------|-----------|
 | `devkit ngs <服务名>` | 在当前项目目录下创建 RPC 服务（Kitex） |
 | `devkit nas <服务名>` | 在当前项目目录下创建 API 服务（HTTP，Hertz） |
-| `devkit update` | 把 devkit 管理的文件（Makefile、CI、Dockerfile、`main.go`、`conf/README*.md`）升级到最新模板。在服务目录内执行只更新该服务；在项目目录下执行则更新全部服务。`--check` 只显示版本和本地改动 |
+| `devkit update` | 把 devkit 管理的文件（Makefile、CI、Dockerfile、`main.go`、`conf/README*.md`）升级到最新模板。在服务目录内执行只更新该服务；在项目目录下执行则更新全部服务。同时刷新 `devkit ai` 装的 skill 副本。`--check` 只显示版本和本地改动 |
 | `devkit self-update` | 升级 devkit 自身。`--check` 只报告 |
 | `devkit lint` | 按团队规矩检查服务（`make lint` 跑的就是它），见上文 |
 | `devkit hooks` | 装 git pre-push 钩子：每次推送前跑 `make lint && make test`（和 CI 的 test 阶段一样；`--remove` 卸掉，`git push --no-verify` 跳过一次）。`ngs` 和 `update` 也会装 |

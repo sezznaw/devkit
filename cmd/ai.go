@@ -34,7 +34,9 @@ comes up) are copied to .agents/skills/ and .claude/skills/ at the same
 time: devkit's built-in ones (devkit-rpc-method, devkit-gateway-api,
 devkit-gateway-domain, devkit-finish: the framework's way, same in every
 project) and the project's own under idl/skills/<name>/SKILL.md (a project
-skill with a built-in's name replaces it). devkit pull refreshes the copies.
+skill with a built-in's name replaces it). devkit pull and devkit update
+refresh the copies; the built-in ones come from the devkit binary, so after
+a devkit release run devkit self-update first.
 Edit the sources, not the copies.
 
 A tool not listed reads the guide when told to: "先读 idl/AGENTS.md".`,

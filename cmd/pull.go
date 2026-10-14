@@ -161,7 +161,8 @@ Run it again any time: new repositories are cloned, the others fast-forward
 		}
 		services, _ := project.Services(dir)
 		if len(services) > 0 {
-			if team, ok := teamFor(cmd, services[0]); ok {
+			team, ok := teamFor(cmd, services[0])
+			if ok {
 				syncProject(ctx, cfg, dir, team, false, logf)
 			} else {
 				logf("warning: could not read the team's template versions from the registry; go.work and kit-common/ were not set up (run devkit update in a service later)")
@@ -172,11 +173,7 @@ Run it again any time: new repositories are cloned, the others fast-forward
 			}
 			lockCommonQuietly(dir, func(string, ...any) {})
 			logf("%d service(s): pre-push hook installed, framework files locked", len(services))
-			if w, r, err := workspace.RefreshAISkills(dir); err != nil {
-				logf("warning: skills: %v", err)
-			} else if len(w)+len(r) > 0 {
-				logf("AI skills refreshed from %s (%d written, %d removed)", workspace.AISkillsSource, len(w), len(r))
-			}
+			refreshSkills(dir, team.DevkitVersion, logf)
 			if !pullFlags.noTools {
 				// Each template has its own generators (kitex and thriftgo for
 				// an RPC service, hz and the swagger plugin for a gateway), so
