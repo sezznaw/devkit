@@ -70,6 +70,10 @@ Release rules learned the hard way:
 - The release workflow does not run tests. Wait for the `ci` workflow to be
   green on the commit before pushing a tag; `v0.1.0` was tagged on a red commit.
 - Never move or re-push a release tag. Fix forward with the next patch version.
+- A release that changes `internal/skills/builtin` needs the templates'
+  `DevkitVersion` raised to it in devkit-registry (devkit update/pull compare
+  with it to tell older binaries to self-update). The release workflow's
+  `team-version` job and the registry's check.py (CI, daily) fail until it is.
 - Test `install.sh` against the live release after publishing (scratch
   `HOME` and `INSTALL_DIR`); fake-server tests did not catch the real API's
   JSON shape. The `releases/latest` redirect can lag a few seconds behind a

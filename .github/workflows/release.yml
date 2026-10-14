@@ -20,3 +20,21 @@ jobs:
           args: release --clean
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  # The templates' DevkitVersion must follow a release that changed the
+  # built-in skills (devkit update and pull compare with it to tell an older
+  # binary to self-update). The release is published either way; this job
+  # goes red, and stays red in the registry's daily check, until the
+  # templates follow.
+  team-version:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: devkit
+          fetch-depth: 0
+      - uses: actions/checkout@v4
+        with:
+          repository: sezznaw/devkit-registry
+          path: devkit-registry
+      - run: python3 devkit-registry/scripts/check.py
