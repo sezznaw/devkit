@@ -260,7 +260,9 @@ are the same in every project: no middleware opened by hand (`rt.DB`,
 `rate-type`, `no-float-money`), a file field as `<name>_key` in a request
 and `<name>_url` in a response, never a path and never a URL sent by a
 client (`file-field`: the database stores the key, the service builds the
-URL), `request_id` on write methods, a comment
+URL), `request_id` on write methods, and passed on from the request being
+handled (`request-id-source`: `req.RequestId`, `kitexx.RequestID(ctx)` or
+`kitexx.SubRequestID(ctx, part)`, never a new UUID or timestamp), a comment
 on every IDL method, `// @limit` on login, registration, password and code
 endpoints (`limit`), events inside a transaction through `PublishTx`
 (`outbox`), no `time.AfterFunc` for later work (`delay`: use `rt.Delay`), a

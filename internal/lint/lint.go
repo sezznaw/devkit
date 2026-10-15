@@ -349,6 +349,9 @@ func checkGoFile(root, rel string, c goCheck) ([]Finding, error) {
 		if (strings.HasPrefix(rel, "handler"+string(filepath.Separator)) || strings.HasPrefix(rel, "repo"+string(filepath.Separator))) && localMutex.MatchString(code) && !ignored(line, "mutex") {
 			out = append(out, Finding{rel, n, "mutex", "a sync.Mutex locks this replica only; the service runs several, so exclusion across them is redisx.WithLock(ctx, rt.Redis, name, ttl, fn) (a mutex that only guards in-process state: //devkit:lint-ignore mutex)"})
 		}
+		if v, bad := checkRequestIDSource(rel, code); bad && !ignored(line, "request-id-source") {
+			out = append(out, Finding{rel, n, "request-id-source", "request_id set from " + v + ": a write call made while handling a request passes that request's id, req.RequestId / kitexx.RequestID(ctx), or kitexx.SubRequestID(ctx, part) for several calls of one method; a new id (UUID, time, counter) makes a retry run the write again. A job or consumer sets its own repeatable id once with ctx = kitexx.WithRequestID(ctx, \"settle:\"+key) and passes kitexx.RequestID(ctx)"})
+		}
 		if inProcessTimer.MatchString(code) && !ignored(line, "delay") {
 			out = append(out, Finding{rel, n, "delay", "a timer dies with the process: something to run at a time (cancel an unpaid order, close bets at kick-off) is rt.Delay.Schedule(ctx, tx, kind, key, at, payload) with rt.Delay.Handle(kind, fn) in app.Setup; repeating work is a job (--job)"})
 		}
