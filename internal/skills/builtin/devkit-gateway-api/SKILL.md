@@ -43,6 +43,8 @@ if err != nil {
 hertzx.OK(c, &common.Empty{})                         // 有数据就 hertzx.OK(c, profileOf(r.Profile)) 这样转成 hertz_gen 的结构体
 ```
 
+写接口把 `req.RequestID` 原样传给 RPC 的 `RequestId`；一个接口要对同一个 RPC 写方法调多次时，各用 `kitexx.SubRequestID(ctx, "<业务名>")`。不要新生成 id（lint 规则 request-id-source，客户端中间件也会拒绝）。
+
 - 网关自己判出的错 `hertzx.FailCode(c, errcode.BadParam, "...")`，码用 `kitex_gen/errcode` 常量。
 - **不要写 `c.JSON`**（lint 规则 envelope-write）。`make gen` 自动加的 `hertz_gen/common` import 不要删。
 - 分页转发：领域包里的 `paging.go` 把 HTTP 的 page 转给 RPC（`hertz_gen/common` 和 `kitex_gen/common` 是两个 Go 类型），照已有领域的写。

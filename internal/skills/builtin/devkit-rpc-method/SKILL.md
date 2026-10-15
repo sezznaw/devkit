@@ -34,6 +34,7 @@ cd idl && git add -A && git commit -m "feat(member): UpdateAvatar" && git push &
 - 业务错误：`return nil, errcode.Err(errcode.BadCredentials)`（消息就是 errors 文件里那行注释）；要补细节 `errcode.Errf(errcode.MemberNotFound, "uid 7")`。**不要手写消息字符串**（lint 规则 error-msg），不要写数字码。
 - 分页：`page, size, offset := pagex.Normalize(req.Page)`（调用方没传 page 块时 `req.Page` 是 nil，Normalize 按第 1 页、默认条数处理）。
 - 需要锁、缓存、延时任务、事件：用 `rt.X`（AGENTS.md「框架替你做了什么」的表），不要自己造。
+- 调别的服务的写方法（请求带 `request_id`）：`request_id` 传 `req.RequestId` 或 `kitexx.RequestID(ctx)`；一次请求里对同一个方法调多次，各用 `kitexx.SubRequestID(ctx, "fee")` 这样按业务命名的 id。**不要新生成 UUID / 时间戳**——上游重试时下游会再执行一次（lint 规则 request-id-source；客户端中间件也会拒绝这种调用）。消费者、延时任务、job 里先 `ctx = kitexx.WithRequestID(ctx, "<动作>:"+业务键)`（每次重跑相同），再传 `kitexx.RequestID(ctx)`。
 
 ## 5. 测试：`handler/<主题>_test.go`
 
