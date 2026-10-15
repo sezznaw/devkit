@@ -257,7 +257,10 @@ against the team's conventions, whoever wrote the code. The generic rules
 are the same in every project: no middleware opened by hand (`rt.DB`,
 `rt.Redis`, `rt.Kafka`, `rt.S3`, `rt.Provider` instead), money fields as
 `common.Money` and rates as `common.Decimal`, never a float (`money-type`,
-`rate-type`, `no-float-money`), `request_id` on write methods, a comment
+`rate-type`, `no-float-money`), a file field as `<name>_key` in a request
+and `<name>_url` in a response, never a path and never a URL sent by a
+client (`file-field`: the database stores the key, the service builds the
+URL), `request_id` on write methods, a comment
 on every IDL method, `// @limit` on login, registration, password and code
 endpoints (`limit`), events inside a transaction through `PublishTx`
 (`outbox`), no `time.AfterFunc` for later work (`delay`: use `rt.Delay`), a

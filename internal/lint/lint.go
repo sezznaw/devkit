@@ -225,6 +225,11 @@ var baseRateWords = []string{"odds", "rate", "ratio", "percent", "pct", "multipl
 // is not a ratio and "feedback" is not a fee.
 var rateName = regexp.MustCompile(`(?i)(^|_)(` + strings.Join(baseRateWords, "|") + `)(_|$)`)
 
+// fileWord: a field about a file (an image, a document, an export...).
+// Rule file-field: such a field is `<name>_key` in a request and
+// `<name>_url` in a response; never `_path`, never `_url` in a request.
+var fileWord = regexp.MustCompile(`(?i)(^|_)(image|img|file|avatar|logo|icon|photo|picture|pic|banner|cover|thumb|thumbnail|doc|document|attachment|video|audio|media|cert|certificate|license|licence|receipt|voucher|qrcode|qr|kyc|idcard|id_card|passport|selfie|export|upload|download)(_|$)`)
+
 // isRateType: common.Decimal / Decimal, or a container of it.
 func isRateType(typ string) bool {
 	t := strings.TrimSpace(typ)
@@ -490,6 +495,14 @@ func checkIDL(path string, api bool, moneyName *regexp.Regexp) ([]Finding, error
 				fm := fieldFullRE.FindStringSubmatch(line)
 				sh := &shapes[len(shapes)-1]
 				sh.fields = append(sh.fields, respField{id: fm[1], optional: strings.TrimSpace(fm[2]) == "optional", typ: typ, name: name, line: i + 1, ignored: ignored(line, "no-envelope")})
+			}
+			if !isCommonFile && fileWord.MatchString(name) && !ignored(line, "file-field") {
+				switch {
+				case strings.HasSuffix(name, "_path"):
+					out = append(out, Finding{rel, i + 1, "file-field", fmt.Sprintf("%s.%s: a file is `<name>_key` in a request (the key the client got with its upload link) and `<name>_url` in a response (the service builds the URL: rt.S3.Public().URL(key) for a public file, rt.S3.PresignGet for a private one); the database stores the key; nothing is a path for a client to complete", cur, name)})
+				case strings.HasSuffix(name, "_url") && strings.HasSuffix(cur, "Req"):
+					out = append(out, Finding{rel, i + 1, "file-field", fmt.Sprintf("%s.%s: a client sends the key of the file it uploaded (`%s_key`), not a URL; the URL is built by the service when it answers", cur, name, strings.TrimSuffix(name, "_url"))})
+				}
 			}
 			isRate := rateName.MatchString(name)
 			isMoney := moneyName.MatchString(name) && !countField(name) && !isRate

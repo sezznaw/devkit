@@ -89,6 +89,18 @@ struct TransferReq {
 struct Resp {
     1: string result
 }
+struct UploadAvatarReq {
+    1: string request_id
+    2: string avatar_url
+    3: string callback_url
+    4: string logo_key
+}
+struct ProfileResp {
+    1: string avatar_path
+    2: string avatar_url
+    3: string avatar_key
+    4: string download_url
+}
 service S {
     // 取资料。
     Resp MemberGetProfile(1: GetProfileReq req) (api.post="/v1/member/getProfile")
@@ -121,6 +133,9 @@ service S {
 	}
 	if strings.Count(got, "money-type") != 1 || !strings.Contains(joinMessages(fs), "TransferReq.fee is") {
 		t.Errorf("only fee i64 is the wrong money type: %v", fs)
+	}
+	if msgs := joinMessages(fs); strings.Count(got, "file-field") != 2 || !strings.Contains(msgs, "UploadAvatarReq.avatar_url") || !strings.Contains(msgs, "ProfileResp.avatar_path") {
+		t.Errorf("avatar_url in a request and avatar_path anywhere are the file-field findings (callback_url, logo_key, avatar_url / avatar_key / download_url in a response are fine): %v", fs)
 	}
 }
 
