@@ -157,7 +157,7 @@ IDL 新增的方法 / 结构体 / 错误码、`make lint` / `make test` 结果�
 
 `devkit lint`（`make lint` 在本机和 CI 里都会跑）按团队规矩检查服务，不管代码是谁写的。通用规则所有项目一样：不许自己连中间件
 （要用 `rt.DB`、`rt.Redis`、`rt.Kafka`、`rt.S3`、`rt.Provider`；`no-direct-middleware`）、金额字段必须是 `common.Money`、比例必须是 `common.Decimal`、一律不许浮点
-（`money-type`、`rate-type`、`no-float-money`）、文件字段请求里传 `<名>_key`、响应里给 `<名>_url`，不出现 `_path`、客户端不传 URL（`file-field`：库里存 key，URL 由服务拼）、写方法要有 `request_id`，往下游传的 `request_id` 只能取自正在处理的请求（`request-id-source`：`req.RequestId`、`kitexx.RequestID(ctx)`、`kitexx.SubRequestID(ctx, part)`，不能新生成 UUID 或时间戳）、IDL 方法要有注释（`method-comment`）、登录、注册、改密码、验证码类接口要标 `// @limit`（`limit`）、
+（`money-type`、`rate-type`、`no-float-money`）、文件字段请求里传 `<名>_key`、响应里给 `<名>_url`，不出现 `_path`、客户端不传 URL 也不传文件内容（`file-field`：库里存 key，URL 由服务拼；请求里出现 binary、`_data` / `_base64` 或光秃秃的 `avatar` 都拦）、一个服务一个上传接口 `GetUploadURL(kind, content_type)`，一种文件一个 kind 而不是一个字段一个接口，请求里有文件 key 就必须有它（`upload-method`）、文件不经过网关（`upload-through-gateway`：网关 handler 里不许 `c.FormFile` / multipart、不许 `S3.Put`，客户端对预签名链接直接 PUT）、写方法要有 `request_id`，往下游传的 `request_id` 只能取自正在处理的请求（`request-id-source`：`req.RequestId`、`kitexx.RequestID(ctx)`、`kitexx.SubRequestID(ctx, part)`，不能新生成 UUID 或时间戳）、IDL 方法要有注释（`method-comment`）、登录、注册、改密码、验证码类接口要标 `// @limit`（`limit`）、
 事务里的事件走 `PublishTx`（`outbox`）、不用 `time.AfterFunc` 做延后的事（`delay`，用 `rt.Delay`）、Redis 锁用 `redisx.WithLock` 不自己 `SetNX`（`lock`）、
 handler 和 repo 里不放 `sync.Mutex`（`mutex`，只锁得住一个副本）、用 `hertzx.Bind` 不用 `c.BindAndValidate`（`bind`）、handler 包至少有一个测试（`tests`）、
 任何返回结构体里不得有 `code`/`msg`（`no-envelope`：方法返回数据结构体，网关 handler 以 `hertzx.OK` / `hertzx.Fail` 结束，壳由框架加一次，RPC 失败是 BizStatusError）、

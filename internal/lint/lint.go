@@ -213,6 +213,12 @@ var goPatterns = []pattern{
 
 var vendorOnly = regexp.MustCompile(`\.Provider\(|\bwebhookx\.`)
 
+// gatewayFileIn: a gateway handler reading an uploaded file out of the
+// request (multipart), or writing a body into S3 itself. Files never pass
+// through the gateway (1 MiB body limit): the service presigns a PUT link
+// (GetUploadURL), the client uploads to S3 directly and submits the key.
+var gatewayFileIn = regexp.MustCompile(`\bc\.(FormFile|MultipartForm)\(|\bmultipart\.(NewReader|File)\b|\.S3\.(Put|PutBytes)\(|\.S3\.Public\(\)\.(Put|PutBytes)\(`)
+
 // baseMoneyWords are field names that are money in any project.
 var baseMoneyWords = []string{"amount", "balance", "price", "fee", "total", "credit", "debit", "money", "stake", "payout", "bonus", "turnover", "commission"}
 
@@ -225,10 +231,29 @@ var baseRateWords = []string{"odds", "rate", "ratio", "percent", "pct", "multipl
 // is not a ratio and "feedback" is not a fee.
 var rateName = regexp.MustCompile(`(?i)(^|_)(` + strings.Join(baseRateWords, "|") + `)(_|$)`)
 
-// fileWord: a field about a file (an image, a document, an export...).
-// Rule file-field: such a field is `<name>_key` in a request and
-// `<name>_url` in a response; never `_path`, never `_url` in a request.
-var fileWord = regexp.MustCompile(`(?i)(^|_)(image|img|file|avatar|logo|icon|photo|picture|pic|banner|cover|thumb|thumbnail|doc|document|attachment|video|audio|media|cert|certificate|license|licence|receipt|voucher|qrcode|qr|kyc|idcard|id_card|passport|selfie|export|upload|download)(_|$)`)
+// fileWords are the words that make a field about a file (an image, a
+// document, an export...).
+const fileWords = `image|img|file|avatar|logo|icon|photo|picture|pic|banner|cover|thumb|thumbnail|doc|document|attachment|video|audio|media|cert|certificate|license|licence|receipt|voucher|qrcode|qr|kyc|idcard|id_card|passport|selfie|export|upload|download`
+
+// fileWord: a field about a file. Rule file-field: such a field is
+// `<name>_key` in a request and `<name>_url` in a response; never `_path`,
+// never `_url` in a request, and never the content itself in a request
+// (binary, or a `_data` / `_base64` / `_content` / `_bytes` / `_blob`
+// string, or a bare `avatar` string): the client uploads to S3 through the
+// link GetUploadURL gives it and sends the key.
+var fileWord = regexp.MustCompile(`(?i)(^|_)(` + fileWords + `)(_|$)`)
+
+// fileLastWord: the field's last word is a file word (`avatar`,
+// `kyc_passport`), so the field is the file itself rather than something
+// about it (`file_name`, `document_type`, `export_format`).
+var fileLastWord = regexp.MustCompile(`(?i)(^|_)(` + fileWords + `)$`)
+
+// fileContentSuffix: a request field carrying the bytes of a file.
+var fileContentSuffix = regexp.MustCompile(`(?i)_(data|base64|content|bytes|blob)$`)
+
+// uploadMethod: a method name that says "upload" without being the one
+// upload method a service has (GetUploadURL, kind in the request).
+var uploadMethod = regexp.MustCompile(`(?i)upload|presign`)
 
 // isRateType: common.Decimal / Decimal, or a container of it.
 func isRateType(typ string) bool {
@@ -361,6 +386,9 @@ func checkGoFile(root, rel string, c goCheck) ([]Finding, error) {
 		if c.moneyGo.MatchString(code) && !ignored(line, "no-float-money") {
 			out = append(out, Finding{rel, n, "no-float-money", "money is never a float: int64 in the smallest unit plus a currency code (ask before adding a money field)"})
 		}
+		if c.isAPI && strings.HasPrefix(rel, "handler"+string(filepath.Separator)) && gatewayFileIn.MatchString(code) && !ignored(line, "upload-through-gateway") {
+			out = append(out, Finding{rel, n, "upload-through-gateway", "a file never passes through the gateway (the body limit is 1 MiB): the owning RPC service presigns a PUT link (its GetUploadURL method, one per service, kind says which file), the client uploads to S3 directly and submits the key to the write endpoint (`<name>_key`); the gateway only forwards"})
+		}
 		if c.vendorRule && !c.isVendor && vendorOnly.MatchString(code) && !ignored(line, "vendor-only") {
 			out = append(out, Finding{rel, n, "vendor-only", "third-party calls and callbacks live in the vendor service only (the one that may leave the cluster); move this to ser-vendor and expose an RPC"})
 		}
@@ -461,6 +489,8 @@ func checkIDL(path string, api bool, moneyName *regexp.Regexp) ([]Finding, error
 	isCommonFile := filepath.Base(filepath.Dir(path)) == "common"
 	totalLines := map[string]int{}   // struct -> line of its `total` field
 	listStructs := map[string]bool{} // structs with a `list<...> items` field
+	var keyReqs []string             // file `<name>_key` fields in requests: this IDL needs the upload method
+	hasUploadKind := false           // enum UploadKind (RPC service: the kinds of file it signs links for)
 	if api {
 		out = append(out, checkDomainFile(rel, lines)...)
 	}
@@ -469,6 +499,9 @@ func checkIDL(path string, api bool, moneyName *regexp.Regexp) ([]Finding, error
 	var shapes []respShape                 // every *Resp struct, in order
 	cur := ""
 	for i, line := range lines {
+		if uploadKindRE.MatchString(line) {
+			hasUploadKind = true
+		}
 		if m := structRE.FindStringSubmatch(line); m != nil {
 			cur = m[1]
 			fields[cur] = map[string]bool{}
@@ -500,12 +533,21 @@ func checkIDL(path string, api bool, moneyName *regexp.Regexp) ([]Finding, error
 				sh.fields = append(sh.fields, respField{id: fm[1], optional: strings.TrimSpace(fm[2]) == "optional", typ: typ, name: name, line: i + 1, ignored: ignored(line, "no-envelope")})
 			}
 			if !isCommonFile && fileWord.MatchString(name) && !ignored(line, "file-field") {
+				isReq := strings.HasSuffix(cur, "Req")
+				plain := strings.TrimSpace(typ) == "string" || strings.TrimSpace(typ) == "binary"
 				switch {
 				case strings.HasSuffix(name, "_path"):
 					out = append(out, Finding{rel, i + 1, "file-field", fmt.Sprintf("%s.%s: a file is `<name>_key` in a request (the key the client got with its upload link) and `<name>_url` in a response (the service builds the URL: rt.S3.Public().URL(key) for a public file, rt.S3.PresignGet for a private one); the database stores the key; nothing is a path for a client to complete", cur, name)})
-				case strings.HasSuffix(name, "_url") && strings.HasSuffix(cur, "Req"):
+				case strings.HasSuffix(name, "_url") && isReq:
 					out = append(out, Finding{rel, i + 1, "file-field", fmt.Sprintf("%s.%s: a client sends the key of the file it uploaded (`%s_key`), not a URL; the URL is built by the service when it answers", cur, name, strings.TrimSuffix(name, "_url"))})
+				case isReq && (strings.TrimSpace(typ) == "binary" || (plain && fileContentSuffix.MatchString(name))):
+					out = append(out, Finding{rel, i + 1, "file-field", fmt.Sprintf("%s.%s carries the file's content: a file never travels in a request (the gateway body limit is 1 MiB and nothing should buffer it). The client asks the service's GetUploadURL for a presigned PUT link, uploads to S3 itself, and sends the key as `%s_key`", cur, name, fileContentSuffix.ReplaceAllString(name, ""))})
+				case isReq && plain && fileLastWord.MatchString(name):
+					out = append(out, Finding{rel, i + 1, "file-field", fmt.Sprintf("%s.%s is a bare %s field: if it is the file, the client sends the key it got from GetUploadURL as `%s_key` (never the content, never a URL); if it is something about the file, say what (`%s_name`, `%s_type`), or mark the line `// devkit:lint-ignore file-field`", cur, name, typ, name, name, name)})
 				}
+			}
+			if !isCommonFile && isReqStruct(cur) && fileWord.MatchString(name) && strings.HasSuffix(name, "_key") {
+				keyReqs = append(keyReqs, name)
 			}
 			isRate := rateName.MatchString(name)
 			isMoney := moneyName.MatchString(name) && !countField(name) && !isRate
@@ -527,10 +569,13 @@ func checkIDL(path string, api bool, moneyName *regexp.Regexp) ([]Finding, error
 	// Second pass: methods.
 	returns := map[string]bool{} // struct names a method returns
 	inService := false
+	hasGetUploadURL := false
+	serviceLine := 0
 	for i, line := range lines {
 		t := strings.TrimSpace(line)
 		if strings.HasPrefix(t, "service ") {
 			inService = true
+			serviceLine = i + 1
 			continue
 		}
 		if inService && strings.HasPrefix(t, "}") {
@@ -547,6 +592,11 @@ func checkIDL(path string, api bool, moneyName *regexp.Regexp) ([]Finding, error
 		method, req, ann := m[2], m[3], m[4]
 		returns[strings.TrimPrefix(m[1], "common.")] = true
 		returns[m[1]] = true
+		if method == "GetUploadURL" {
+			hasGetUploadURL = true
+		} else if !isCommonFile && uploadMethod.MatchString(method) && !ignored(line, "upload-method") {
+			out = append(out, Finding{rel, i + 1, "upload-method", fmt.Sprintf("%s: a service has one upload method, GetUploadURL(kind, content_type) → upload_url + file_key, and a kind per file (enum UploadKind in an RPC service, a string in a gateway); not one method per file field. Add a kind instead of this method", method)})
+		}
 		prev := ""
 		for j := i - 1; j >= 0; j-- {
 			if strings.TrimSpace(lines[j]) == "" {
@@ -574,6 +624,13 @@ func checkIDL(path string, api bool, moneyName *regexp.Regexp) ([]Finding, error
 			out = append(out, Finding{rel, i + 1, "request-id", fmt.Sprintf("%s %s looks like a write (name does not read like a query) but %s has no request_id field; add `1: string request_id` so the framework makes it idempotent, or mark the line `// devkit:lint-ignore request-id` if it truly changes nothing", what, method, req)})
 		}
 	}
+	if len(keyReqs) > 0 && !hasGetUploadURL && serviceLine > 0 && !ignored(lines[serviceLine-1], "upload-method") {
+		what := "the one upload method GetUploadURL(kind, content_type) → upload_url + file_key"
+		if !api && !hasUploadKind {
+			what += " and an enum UploadKind listing the kinds of file it signs links for"
+		}
+		out = append(out, Finding{rel, serviceLine, "upload-method", fmt.Sprintf("requests carry file keys (%s) but this service has no GetUploadURL: the client must get each key from %s, and the write method checks the key is the caller's and the object exists (Stat) before storing it", strings.Join(keyReqs, ", "), what)})
+	}
 	var responses []respShape
 	for _, sh := range shapes {
 		if returns[sh.name] || strings.HasSuffix(sh.name, "Resp") {
@@ -583,6 +640,12 @@ func checkIDL(path string, api bool, moneyName *regexp.Regexp) ([]Finding, error
 	out = append(out, checkRespShapes(rel, responses, api)...)
 	return out, nil
 }
+
+// uploadKindRE: the enum an RPC service declares its upload kinds in.
+var uploadKindRE = regexp.MustCompile(`^\s*enum\s+UploadKind\s*\{`)
+
+// isReqStruct: a request struct (the input of a method).
+func isReqStruct(name string) bool { return strings.HasSuffix(name, "Req") }
 
 // sensitiveMethod: a method name or path that takes credentials or
 // one-time codes, which someone will try to guess.

@@ -19,7 +19,9 @@ var lintCmd = &cobra.Command{
 the code. Generic rules, the same in every project: no middleware opened by
 hand (rt.DB, rt.Redis, rt.Kafka, rt.S3, rt.Provider instead), request_id on
 write methods, a comment on every IDL method, framework files untouched, zlog
-for logging, idl.lock current. Project rules, from <idl>/devkit.yaml:
+for logging, idl.lock current, files as keys (<name>_key in, <name>_url out;
+one GetUploadURL per service, nothing uploaded through the gateway). Project
+rules, from <idl>/devkit.yaml:
   lint:
     vendor_service: ser-vendor      # third-party calls only here (unset: rule off)
     money_words: [odds, stake]      # added to amount, balance, price, fee, ... (never floats)

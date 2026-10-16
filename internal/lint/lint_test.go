@@ -119,7 +119,7 @@ service S {
 		t.Fatal(err)
 	}
 	got := joinRules(fs)
-	if strings.Count(got, "request-id") != 1 || !strings.Contains(fs[len(fs)-1].Message+got, "WalletTransfer") {
+	if strings.Count(got, "request-id") != 1 || !strings.Contains(joinMessages(fs), "WalletTransfer") {
 		t.Errorf("only WalletTransfer lacks request_id: %v", fs)
 	}
 	if strings.Count(got, "method-comment") != 1 {
@@ -137,8 +137,141 @@ service S {
 	if msgs := joinMessages(fs); strings.Count(got, "file-field") != 2 || !strings.Contains(msgs, "UploadAvatarReq.avatar_url") || !strings.Contains(msgs, "ProfileResp.avatar_path") {
 		t.Errorf("avatar_url in a request and avatar_path anywhere are the file-field findings (callback_url, logo_key, avatar_url / avatar_key / download_url in a response are fine): %v", fs)
 	}
+	// logo_key is sent in a request, so the service must have GetUploadURL
+	if strings.Count(got, "upload-method") != 1 || !strings.Contains(joinMessages(fs), "logo_key") {
+		t.Errorf("a request with a file key and no GetUploadURL is one upload-method finding: %v", fs)
+	}
 }
 
+// TestUploadRules: the file travels outside the request, and a service has
+// one upload method with a kind per file.
+func TestUploadRules(t *testing.T) {
+	dir := t.TempDir()
+	idl := `namespace go ser_member
+enum UploadKind {
+    AVATAR = 1
+}
+struct GetUploadURLReq {
+    1: i64 uid
+    2: UploadKind kind
+    3: string content_type
+}
+struct GetUploadURLResp {
+    1: string upload_url
+    2: string file_key
+}
+struct UpdateAvatarReq {
+    1: string request_id
+    2: string avatar_key
+}
+struct SetBannerReq {
+    1: string request_id
+    2: binary banner
+    3: string logo_data
+    4: string cover_base64
+    5: string icon
+    6: string file_name
+    7: string document_type
+    8: string export_format
+    9: string photo_key
+    10: string selfie // devkit:lint-ignore file-field
+}
+struct GetAvatarUploadReq {
+    1: i64 uid
+}
+struct Resp {
+    1: string avatar_url
+    2: string avatar_key
+}
+service S {
+    // 申请上传链接。
+    GetUploadURLResp GetUploadURL(1: GetUploadURLReq req)
+    // 换头像。
+    Resp UpdateAvatar(1: UpdateAvatarReq req)
+    // 设 banner。
+    Resp SetBanner(1: SetBannerReq req)
+    // 旧写法：一个字段一个上传接口。
+    GetUploadURLResp GetAvatarUpload(1: GetAvatarUploadReq req)
+    // 旧写法。
+    GetUploadURLResp PresignBannerPut(1: GetAvatarUploadReq req)
+}
+`
+	p := filepath.Join(dir, "ser-member.thrift")
+	os.WriteFile(p, []byte(idl), 0o644)
+	_, mn := moneyPattern(nil)
+	fs, err := checkIDL(p, false, mn)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, msgs := joinRules(fs), joinMessages(fs)
+	// banner (binary), logo_data, cover_base64, icon (bare): four; file_name, document_type,
+	// export_format, photo_key and the ignored selfie are fine
+	if strings.Count(got, "file-field") != 4 {
+		t.Errorf("file content and bare file fields in a request: %v", fs)
+	}
+	for _, want := range []string{"SetBannerReq.banner carries", "SetBannerReq.logo_data carries", "SetBannerReq.cover_base64 carries", "SetBannerReq.icon is a bare string"} {
+		if !strings.Contains(msgs, want) {
+			t.Errorf("missing %q: %v", want, fs)
+		}
+	}
+	for _, fine := range []string{"file_name", "document_type", "export_format", "photo_key", "selfie", "GetUploadURLReq.content_type"} {
+		if strings.Contains(msgs, fine+" ") || strings.Contains(msgs, fine+":") {
+			t.Errorf("%s must not be a finding: %v", fine, fs)
+		}
+	}
+	// GetAvatarUpload and PresignBannerPut are the per-field methods; GetUploadURL is the one allowed
+	if strings.Count(got, "upload-method") != 2 || !strings.Contains(msgs, "GetAvatarUpload:") || !strings.Contains(msgs, "PresignBannerPut:") {
+		t.Errorf("per-field upload methods are upload-method findings: %v", fs)
+	}
+
+	// an RPC service with keys in requests but no GetUploadURL and no UploadKind
+	idl2 := `namespace go ser_x
+struct SetLogoReq {
+    1: string request_id
+    2: string logo_key
+}
+struct Resp {}
+service S {
+    // 设 logo。
+    Resp SetLogo(1: SetLogoReq req)
+}
+`
+	p2 := filepath.Join(dir, "ser-x.thrift")
+	os.WriteFile(p2, []byte(idl2), 0o644)
+	fs, _ = checkIDL(p2, false, mn)
+	if strings.Count(joinRules(fs), "upload-method") != 1 || !strings.Contains(joinMessages(fs), "enum UploadKind") || !strings.Contains(joinMessages(fs), "logo_key") {
+		t.Errorf("keys without GetUploadURL: %v", fs)
+	}
+	// the same line-level opt-out on the service line
+	idl3 := strings.Replace(idl2, "service S {", "service S { // devkit:lint-ignore upload-method", 1)
+	os.WriteFile(p2, []byte(idl3), 0o644)
+	fs, _ = checkIDL(p2, false, mn)
+	if strings.Contains(joinRules(fs), "upload-method") {
+		t.Errorf("ignored: %v", fs)
+	}
+}
+
+func TestUploadThroughGatewayRule(t *testing.T) {
+	dir := t.TempDir()
+	os.MkdirAll(filepath.Join(dir, "handler", "member"), 0o755)
+	os.WriteFile(filepath.Join(dir, "handler", "member", "m.go"), []byte("package member\nfunc A(c *app.RequestContext) {\n\tf, _ := c.FormFile(\"avatar\")\n\t_ = deps.Runtime.S3.PutBytes(ctx, key, b, ct)\n\tform, _ := c.MultipartForm()\n\t_ = f\n\t_ = form\n}\n"), 0o644)
+	os.WriteFile(filepath.Join(dir, "export.go"), []byte("package handler\nfunc B() { _ = rt.S3.PutBytes(ctx, key, b, ct) }\n"), 0o644)
+	mg, _ := moneyPattern(nil)
+	gw := goCheck{isAPI: true, moneyGo: mg}
+	fs, _ := checkGoFile(dir, filepath.Join("handler", "member", "m.go"), gw)
+	if strings.Count(joinRules(fs), "upload-through-gateway") != 3 {
+		t.Errorf("FormFile, S3.PutBytes and MultipartForm in a gateway handler: %v", fs)
+	}
+	// an RPC service writing its own export file is fine, and so is a gateway file outside handler/
+	fs, _ = checkGoFile(dir, "export.go", goCheck{isAPI: false, moneyGo: mg})
+	if strings.Contains(joinRules(fs), "upload-through-gateway") {
+		t.Errorf("rpc service: %v", fs)
+	}
+	fs, _ = checkGoFile(dir, "export.go", gw)
+	if strings.Contains(joinRules(fs), "upload-through-gateway") {
+		t.Errorf("outside handler/: %v", fs)
+	}
+}
 func TestCheckErrorCodes(t *testing.T) {
 	dir := t.TempDir()
 	os.WriteFile(filepath.Join(dir, "h.go"), []byte("package h\nconst CodeMemberNotFound = 2001\nconst CodeNew = 2009\nvar e = kerrors.NewBizStatusError(5001, \"x\")\nvar f = kerrors.NewBizStatusError(5009, \"y\") //devkit:lint-ignore error-code\n"), 0o644)

@@ -258,9 +258,14 @@ are the same in every project: no middleware opened by hand (`rt.DB`,
 `rt.Redis`, `rt.Kafka`, `rt.S3`, `rt.Provider` instead), money fields as
 `common.Money` and rates as `common.Decimal`, never a float (`money-type`,
 `rate-type`, `no-float-money`), a file field as `<name>_key` in a request
-and `<name>_url` in a response, never a path and never a URL sent by a
-client (`file-field`: the database stores the key, the service builds the
-URL), `request_id` on write methods, and passed on from the request being
+and `<name>_url` in a response, never a path, never a URL sent by a
+client and never the file's content in a request (`file-field`: the
+database stores the key, the service builds the URL), one upload method
+per service, `GetUploadURL(kind, content_type)`, with a kind per file
+rather than a method per field, present whenever requests carry file keys
+(`upload-method`), no file through the gateway (`upload-through-gateway`:
+no `c.FormFile` / multipart and no `S3.Put` in a gateway handler; the
+client PUTs to the presigned link), `request_id` on write methods, and passed on from the request being
 handled (`request-id-source`: `req.RequestId`, `kitexx.RequestID(ctx)` or
 `kitexx.SubRequestID(ctx, part)`, never a new UUID or timestamp), a comment
 on every IDL method, `// @limit` on login, registration, password and code
