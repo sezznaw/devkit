@@ -384,7 +384,7 @@ func checkGoFile(root, rel string, c goCheck) ([]Finding, error) {
 			out = append(out, Finding{rel, n, "outbox", "this file runs a database transaction: an event that belongs with the change goes through rt.Kafka.PublishTx(ctx, tx, ...) inside it (the outbox), not Publish; keep Publish only for events without a transaction behind them"})
 		}
 		if c.moneyGo.MatchString(code) && !ignored(line, "no-float-money") {
-			out = append(out, Finding{rel, n, "no-float-money", "money is never a float: int64 in the smallest unit plus a currency code (ask before adding a money field)"})
+			out = append(out, Finding{rel, n, "no-float-money", "money is never a float: common.Money in the IDL (a decimal string plus a currency code) and moneyx.Money in Go (ask before adding a money field)"})
 		}
 		if c.isAPI && strings.HasPrefix(rel, "handler"+string(filepath.Separator)) && gatewayFileIn.MatchString(code) && !ignored(line, "upload-through-gateway") {
 			out = append(out, Finding{rel, n, "upload-through-gateway", "a file never passes through the gateway (the body limit is 1 MiB): the owning RPC service presigns a PUT link (its GetUploadURL method, one per service, kind says which file), the client uploads to S3 directly and submits the key to the write endpoint (`<name>_key`); the gateway only forwards"})

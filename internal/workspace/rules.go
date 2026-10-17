@@ -31,7 +31,8 @@ type LintRules struct {
 	// (rule vendor-only). Empty: the rule is off.
 	VendorService string `yaml:"vendor_service"`
 	// MoneyWords are added to the built-in list (amount, balance, price, fee,
-	// total, credit, debit, money) for rule no-float-money.
+	// total, credit, debit, money, stake, payout, bonus, turnover, commission)
+	// for rules money-type and no-float-money.
 	MoneyWords []string `yaml:"money_words"`
 	// ErrorsFile is the business-code table (a Markdown table), relative to
 	// the IDL directory (rule error-code). Superseded by ErrorsDir.

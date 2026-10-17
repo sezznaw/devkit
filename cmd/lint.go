@@ -23,11 +23,13 @@ for logging, idl.lock current, files as keys (<name>_key in, <name>_url out;
 one GetUploadURL per service, nothing uploaded through the gateway). Project
 rules, from <idl>/devkit.yaml:
   lint:
-    vendor_service: ser-vendor      # third-party calls only here (unset: rule off)
-    money_words: [odds, stake]      # added to amount, balance, price, fee, ... (never floats)
+    vendor_service: ser-vendor      # third-party calls only here (rule vendor-only; unset: off)
+    report_service: ser-report      # the one service that may open the report database (report-only; unset: off)
+    money_words: [wager]            # added to the built-in money words (amount, balance, stake, payout, fee, ...)
     errors_dir: errors              # error-code Thrift files, one per domain (unset: rule off)
     error_ranges: {member: 2000-2999} # the codes each file may declare
-    disable: []                     # rules this project does not want
+    handler_methods: 8              # RPC methods one handler file may hold (handler-split)
+    disable: []                     # rules this project does not want (names: devkit lint --rules)
 
 Run it inside a service (make lint does), or in the project directory for
 every service. A line can opt out of one rule with a comment:
@@ -36,6 +38,12 @@ every service. A line can opt out of one rule with a comment:
 Exit status 1 when there are findings, so CI stops.`,
 	Args: cobra.NoArgs,
 	RunE: func(cmd *cobra.Command, args []string) error {
+		if lintFlags.rules {
+			for _, r := range lint.Rules {
+				fmt.Printf("%-24s %s\n", r.Name, r.Summary)
+			}
+			return nil
+		}
 		var roots []string
 		if root, err := project.FindRoot("."); err == nil {
 			roots = []string{root}
@@ -97,9 +105,13 @@ Exit status 1 when there are findings, so CI stops.`,
 	},
 }
 
-var lintFlags struct{ idl string }
+var lintFlags struct {
+	idl   string
+	rules bool
+}
 
 func init() {
 	lintCmd.Flags().StringVar(&lintFlags.idl, "idl", "", "the IDL checkout (default: <project>/idl; CI passes $IDL_DIR)")
+	lintCmd.Flags().BoolVar(&lintFlags.rules, "rules", false, "list every rule with one line each (the name goes after //devkit:lint-ignore or in devkit.yaml disable) and exit")
 	rootCmd.AddCommand(lintCmd)
 }
