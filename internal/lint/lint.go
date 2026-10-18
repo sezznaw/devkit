@@ -123,6 +123,7 @@ func Run(o Options) ([]Finding, error) {
 			out = append(out, checkErrorCodes(o.Root, goFiles, filepath.Join(o.IDLDir, o.ErrorsFile))...)
 		}
 		out = append(out, checkIDLLock(o.Root, o.IDLDir, service)...)
+		out = append(out, checkIDLDeps(o.Root, o.IDLDir)...)
 	}
 	if len(o.Disable) > 0 {
 		off := map[string]bool{}

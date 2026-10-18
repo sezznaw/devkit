@@ -104,6 +104,7 @@ idl_repo: "git@gitlab.yourcompany.com:shop/idl.git"     # 或 GitHub 上的 owne
     conf/README.md          全部配置项的参考文档，由 devkit 保持最新
     kitex_gen/              生成的代码，已被 git 忽略，只读
     idl.lock                代码是按哪个 IDL 提交生成的；make gen 写
+    idl.deps                本服务和它调用的每个服务的 IDL 代数；make gen 写，启动时据此等依赖到位
     .devkit/manifest.json   devkit 记录它管理的文件
     idl.mk                  本服务要为哪些 IDL 生成代码（归你编辑）
     Makefile                tools / gen / build / run / test / docker
@@ -168,7 +169,7 @@ go.mod 里公共库的版本等于模板定的版本（`common-version`）、项
 项目自己的规则写在 IDL 仓库的 `devkit.yaml`（本机和 CI 读同一份）：`lint.vendor_service`（调第三方只能在它：`vendor-only`）、`lint.report_service`（只有它能开报表库：`report-only`）、
 `lint.money_words`（追加金额字段词）、`lint.errors_dir` + `lint.error_ranges`（错误码只在 Thrift 文件里按领域声明一次，每个码一行说明、落在本领域的号段内，代码里用生成的 `errcode` 常量：
 `error-code`、`error-dup`、`error-range`、`error-comment`）、`lint.handler_methods`、`lint.disable`。每条输出都写了该怎么改；有问题退出码 1，CI 停下。某一行确属误报可加 `//devkit:lint-ignore <规则>`。`idl-lock` 规则堵住分仓库的"先推 IDL"陷阱：`make gen` 写 `idl.lock`，
-CI 按这个 IDL 提交构建，锁落后于检出或该提交还没推到服务器时，本机 lint 就报错。
+CI 按这个 IDL 提交构建，锁落后于检出或该提交还没推到服务器时，本机 lint 就报错。`idl-deps` 让 `idl.deps` 与之同步：`make gen` 两个一起写，`idl.deps` 里的 IDL 代数就是服务启动时等依赖到位的依据（kit-common 的依赖闸门），发布因此不用排顺序。
 服务不在项目目录里时（CI）用 `--idl` 指定 IDL 检出。
 
 ### 端口

@@ -37,6 +37,7 @@ var Rules = []Rule{
 	{"common-version", "go.mod's kit-common version equals the template's (devkit update changes it)"},
 	{"common-checkout", "the project's kit-common/ checkout has no local changes"},
 	{"idl-lock", "idl.lock exists, is not behind the IDL checkout, the IDL has no uncommitted changes and the locked commit is pushed"},
+	{"idl-deps", "idl.deps exists and was written for the commit idl.lock names (make gen writes both; the deps gate at start waits for the generations in it)"},
 	{"domain-file", "a gateway domain is one thrift file, one namespace and one handler package of the same lowercase name"},
 	{"domain-path", "a domain's routes are /v1/<domain>/..."},
 	{"domain-include", "a domain file includes only common.thrift"},

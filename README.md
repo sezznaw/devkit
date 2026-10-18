@@ -124,6 +124,7 @@ then put `<url>` into `idl_repo` so teammates get the same IDLs. The shared
     conf/README.md          reference of all settings, kept up to date by devkit
     kitex_gen/              generated code, git-ignored, read-only
     idl.lock                which IDL commit the code was generated from; written by make gen
+    idl.deps                the IDL generation of this service and of each service it calls; written by make gen, waited for at start
     .devkit/manifest.json   devkit's record of the files it manages
     idl.mk                  which IDLs this service generates code for (yours to edit)
     Makefile                tools / gen / build / run / test / docker
@@ -305,7 +306,9 @@ Every finding says what to do instead; exit status 1 stops CI. A line opts
 out of one rule with `//devkit:lint-ignore <rule>`. `idl-lock` closes the
 "push the IDL first" trap of separate repositories: `make gen` writes
 `idl.lock`, CI builds against that IDL commit, and lint fails before a push
-when the lock lags the checkout or the IDL commit is not on the server. `--idl` points at the
+when the lock lags the checkout or the IDL commit is not on the server. `idl-deps` keeps `idl.deps`
+in step with it: `make gen` writes both, and the IDL generations in `idl.deps` are what a service
+waits for at start (the dependency gate in kit-common) so that releases need no order. `--idl` points at the
 IDL checkout when the service is not inside a project directory (CI).
 
 ### Ports
