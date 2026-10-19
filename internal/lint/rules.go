@@ -26,6 +26,7 @@ var Rules = []Rule{
 	{"rate-type", "a field whose name says ratio (odds, rate, percent, ...) is common.Decimal"},
 	{"request-id", "a write method's request starts with request_id"},
 	{"method-comment", "every IDL method has a comment (its title is the docs)"},
+	{"method-title", "a gateway method's title (the first sentence of its comment, the /docs sidebar) is at most 12 characters and has no punctuation; details go after it"},
 	{"paging", "list paging is common.PageReq / common.PageInfo, not hand-written page fields"},
 	{"no-envelope", "no code / msg in a response struct: the gateway adds the envelope"},
 	{"limit", "login-like methods (login, register, password, code) carry // @limit"},

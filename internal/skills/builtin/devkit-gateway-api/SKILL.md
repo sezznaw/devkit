@@ -14,7 +14,7 @@ description: 给 Hertz 网关加一个 HTTP 接口或改一个接口——在对
 - 文件头 `include "../common/common.thrift"` 是领域文件唯一允许的 include（lint 规则 domain-include）。
 - 方法注解 `(api.post="/v1/<领域>/<动作>")`，路径里的领域必须等于文件名（lint 规则 domain-path）。POST 还是 GET：带用户态或写一律 POST；拿不准问人。
 - 方法名不带领域前缀（`GetProfile`，不是 `MemberGetProfile`）。
-- 方法注释**第一句是接口标题**（显示在 `/docs`），其余是说明。注释里的标记：`// @public` 免登录（**要先问人**）；后台接口 `// @perm <领域>.<动作>`（view / manage）；登录、注册、密码类 `// @limit 30/m`。
+- 方法注释**第一句是接口标题**（显示在 `/docs` 左栏）：不超过 12 个字的名词短语，不带标点、错误码和括号说明，同一组接口用同一个前缀加「·」或序号（「验证码·查询」「找回密码 1 核对账号」；不用「：」，apidoc 把它当标题分隔符），lint 规则 method-title；规则、错误码、说明从第二句起写。注释里的标记：`// @public` 免登录（**要先问人**）；后台接口 `// @perm <领域>.<动作>`（view / manage）；登录、注册、密码类 `// @limit 30/m`。
 - 列表接口：请求 `1: common.PageReq page`，响应 `items` + `common.PageInfo page`。
 
 ## 2. 推送 IDL

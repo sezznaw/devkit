@@ -269,7 +269,9 @@ no `c.FormFile` / multipart and no `S3.Put` in a gateway handler; the
 client PUTs to the presigned link), `request_id` on write methods, and passed on from the request being
 handled (`request-id-source`: `req.RequestId`, `kitexx.RequestID(ctx)` or
 `kitexx.SubRequestID(ctx, part)`, never a new UUID or timestamp), a comment
-on every IDL method, `// @limit` on login, registration, password and code
+on every IDL method, a short title as the first sentence of a gateway method's
+comment (`method-title`: at most 12 characters, no punctuation; it is the
+/docs sidebar entry, details go after it), `// @limit` on login, registration, password and code
 endpoints (`limit`), events inside a transaction through `PublishTx`
 (`outbox`), no `time.AfterFunc` for later work (`delay`: use `rt.Delay`), a
 Redis lock through `redisx.WithLock` rather than a hand-written `SetNX`

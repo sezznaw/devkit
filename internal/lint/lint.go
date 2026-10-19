@@ -609,6 +609,16 @@ func checkIDL(path string, api bool, moneyName *regexp.Regexp) ([]Finding, error
 		if !strings.HasPrefix(prev, "//") && !strings.HasPrefix(prev, "/*") && !strings.HasSuffix(prev, "*/") && !ignored(line, "method-comment") {
 			out = append(out, Finding{rel, i + 1, "method-comment", fmt.Sprintf("%s has no comment: the first sentence is the endpoint's title in /docs", method)})
 		}
+		// the first sentence of the comment is the /docs sidebar entry: short, no punctuation
+		if api && !ignored(line, "method-title") {
+			if title, ok := methodTitle(lines, i); ok {
+				if n := len([]rune(title)); n > maxTitleRunes {
+					out = append(out, Finding{rel, i + 1, "method-title", fmt.Sprintf("%s: its title %q is %d characters, at most %d: the first sentence of the comment is the entry in the /docs sidebar, so keep it a short noun phrase (登录, 角色列表, 找回密码 1 核对账号) and put rules, codes and details after the first 。", method, title, n, maxTitleRunes)})
+				} else if titlePunct.MatchString(title) {
+					out = append(out, Finding{rel, i + 1, "method-title", fmt.Sprintf("%s: its title %q contains punctuation: the first sentence of the comment is the entry in the /docs sidebar, a short noun phrase without ，、；：（）; put details after the first 。 and prefix a group with · or a number (验证码·查询, 找回密码 1 核对账号), not ：, which apidoc treats as the end of the title", method, title)})
+				}
+			}
+		}
 		// a brute-force surface needs its own request-rate limit
 		if api && sensitiveMethod.MatchString(method+" "+ann) && !commentBlockHas(lines, i, limitTag) && !ignored(line, "limit") {
 			out = append(out, Finding{rel, i + 1, "limit", fmt.Sprintf("%s takes credentials or codes: add `// @limit <count>/m` above it (per client IP; the gateway's guard enforces it), for example `// @limit 30/m`", method)})
@@ -653,6 +663,41 @@ func isReqStruct(name string) bool { return strings.HasSuffix(name, "Req") }
 var sensitiveMethod = regexp.MustCompile(`(?i)login|register|signup|password|passwd|otp|captcha|verifycode|sendcode|sms|resetpwd|forgot`)
 
 var limitTag = regexp.MustCompile(`@limit\s+\S+`)
+
+// maxTitleRunes: a method title is a menu entry, not a sentence.
+const maxTitleRunes = 12
+
+// titlePunct: punctuation that means the title is carrying details (or a
+// group prefix written with ：, which apidoc cuts the title at).
+var titlePunct = regexp.MustCompile(`[，、；：（）,;:()]`)
+
+// methodTitle returns the title apidoc shows for the method on line i: the
+// first sentence (up to the first 。 or ". ") of the first comment line
+// above it that is not a directive (@public, @perm, ...). ok is false when
+// there is no such line (method-comment reports that).
+func methodTitle(lines []string, i int) (title string, ok bool) {
+	var block []string
+	for j := i - 1; j >= 0; j-- {
+		t := strings.TrimSpace(lines[j])
+		if t == "" || !(strings.HasPrefix(t, "//") || strings.HasPrefix(t, "*") || strings.HasPrefix(t, "/*")) {
+			break
+		}
+		t = strings.TrimSpace(strings.TrimLeft(t, "/* "))
+		block = append([]string{t}, block...)
+	}
+	for _, t := range block {
+		if t == "" || strings.HasPrefix(t, "@") || strings.HasPrefix(t, "devkit:") {
+			continue
+		}
+		for _, sep := range []string{"。", ". "} {
+			if k := strings.Index(t, sep); k > 0 {
+				t = t[:k]
+			}
+		}
+		return strings.TrimSpace(t), true
+	}
+	return "", false
+}
 
 // commentBlockHas reports whether the comment lines right above line i
 // contain a match of re.
