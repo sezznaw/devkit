@@ -25,8 +25,9 @@ taken from the service templates, and a tool of another version counts as a
 problem. With --fix it installs or replaces
 what is needed: Go from go.dev into ~/.devkit/go (only when no Go is present),
 the generators with go install. Installed tools are put on PATH through
-~/.devkit/env; source it from your shell profile once. 'devkit ngs' runs the
-same check automatically, and so does 'devkit nas'.`,
+~/.devkit/env, and your shell profile (~/.zshrc, or ~/.bashrc / ~/.bash_profile
+for bash) is made to source it; restart the shell afterwards. 'devkit ngs' runs
+the same check automatically, and so does 'devkit nas'.`,
 	Args: cobra.NoArgs,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		want, source := teamVersions(cmd)

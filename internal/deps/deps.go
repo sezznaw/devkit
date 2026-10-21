@@ -6,10 +6,15 @@
 //
 //	~/.devkit/go        a Go toolchain downloaded from go.dev (only if none is present)
 //	$(go env GOPATH)/bin kitex and thriftgo via `go install`
-//	~/.devkit/env       shell snippet that puts both on PATH; sourced from ~/.zshrc etc.
+//	~/.devkit/env       shell snippet that puts both (and devkit itself, when it
+//	                    lives under $HOME) on PATH, rustup-style; install.sh
+//	                    writes it first and the shell profile sources it
 //
-// The current process's PATH is extended too, so hooks run later in the same
-// devkit invocation find the tools without a shell restart.
+// After installing something, Ensure adds the `. "$HOME/.devkit/env"` line to
+// the shell profile (~/.zshrc for zsh, ~/.bashrc or ~/.bash_profile for bash)
+// so that nobody has to edit it by hand; other shells get a hint. The current
+// process's PATH is extended too, so hooks run later in the same devkit
+// invocation find the tools without a shell restart.
 package deps
 
 import (
@@ -168,7 +173,23 @@ func Ensure(ctx context.Context, want Want, rep Reporter) ([]Status, error) {
 	if err := writeEnvFile(ctx); err != nil {
 		rep.Log("warning: could not write %s: %v", envFile(), err)
 	}
+	if anyInstalled(out) {
+		if profile, added, err := ensureProfile(); err != nil {
+			rep.Log("warning: could not update %s: %v", profile, err)
+		} else if added {
+			rep.Log("%s now sources %s (tools on PATH in new shells)", shortHome(profile), shortHome(envFile()))
+		}
+	}
 	return out, nil
+}
+
+func anyInstalled(statuses []Status) bool {
+	for _, s := range statuses {
+		if s.Installed {
+			return true
+		}
+	}
+	return false
 }
 
 // SameVersion compares tool versions ignoring a leading "v": kitex prints
@@ -403,34 +424,116 @@ func EnvFile() string { return envFile() }
 
 func writeEnvFile(ctx context.Context) error {
 	var dirs []string
+	// devkit itself: install.sh falls back to ~/.local/bin when /usr/local/bin
+	// is not writable, and that directory is on nobody's PATH by default.
+	if exe, err := os.Executable(); err == nil {
+		if dir := filepath.Dir(exe); underHome(dir) {
+			dirs = append(dirs, dir)
+		}
+	}
 	if _, err := os.Stat(devkitGoBin()); err == nil {
-		dirs = append(dirs, `"$HOME/.devkit/go/bin"`)
+		dirs = append(dirs, devkitGoBin())
 	}
 	if gp := goPathBin(ctx); gp != "" {
-		home, _ := os.UserHomeDir()
-		if strings.HasPrefix(gp, home) {
-			gp = `"$HOME` + strings.TrimPrefix(gp, home) + `"`
-		} else {
-			gp = `"` + gp + `"`
-		}
 		dirs = append(dirs, gp)
 	}
 	if len(dirs) == 0 {
 		return nil
 	}
-	content := "# devkit: tools installed for you. Source this file from your shell profile:\n" +
-		"#   echo 'source \"$HOME/.devkit/env\"' >> ~/.zshrc\n" +
-		"export PATH=" + strings.Join(dirs, ":") + ":\"$PATH\"\n"
-	return os.WriteFile(envFile(), []byte(content), 0o644)
+	var b strings.Builder
+	b.WriteString("# devkit: tools installed for you; your shell profile sources this file.\n")
+	for _, d := range dirs {
+		b.WriteString(envLine(d))
+	}
+	return os.WriteFile(envFile(), []byte(b.String()), 0o644)
+}
+
+// envLine is one line of ~/.devkit/env: it prepends dir to PATH unless it is
+// there already, so sourcing the file twice does not grow PATH. Directories
+// under the home directory are written as $HOME/... (install.sh writes the
+// same shape, so both writers recognise each other's lines).
+func envLine(dir string) string {
+	q := `"` + dir + `"`
+	if home, _ := os.UserHomeDir(); home != "" && underHome(dir) {
+		q = `"$HOME` + strings.TrimPrefix(dir, home) + `"`
+	}
+	d := strings.Trim(q, `"`)
+	return `case ":$PATH:" in *":` + d + `:"*) ;; *) export PATH="` + d + `:$PATH" ;; esac` + "\n"
+}
+
+func underHome(dir string) bool {
+	home, err := os.UserHomeDir()
+	if err != nil || home == "" {
+		return false
+	}
+	return dir == home || strings.HasPrefix(dir, home+string(os.PathSeparator))
+}
+
+func shortHome(p string) string {
+	if home, _ := os.UserHomeDir(); home != "" && underHome(p) {
+		return "~" + strings.TrimPrefix(p, home)
+	}
+	return p
+}
+
+// profilePath is the file the user's login shell reads at start-up, or "" for
+// a shell devkit does not know how to edit. macOS Terminal starts bash as a
+// login shell, which reads ~/.bash_profile and not ~/.bashrc.
+func profilePath() string {
+	home, err := os.UserHomeDir()
+	if err != nil || home == "" {
+		return ""
+	}
+	switch filepath.Base(os.Getenv("SHELL")) {
+	case "zsh":
+		if z := os.Getenv("ZDOTDIR"); z != "" {
+			return filepath.Join(z, ".zshrc")
+		}
+		return filepath.Join(home, ".zshrc")
+	case "bash":
+		if runtime.GOOS == "darwin" {
+			return filepath.Join(home, ".bash_profile")
+		}
+		return filepath.Join(home, ".bashrc")
+	}
+	return ""
+}
+
+// profileLine is what ensureProfile appends; the same line as install.sh.
+const profileLine = "\n. \"$HOME/.devkit/env\"  # devkit: tools on PATH\n"
+
+// profileSourcesEnv reports whether the shell profile already loads ~/.devkit/env.
+func profileSourcesEnv(profile string) bool {
+	b, err := os.ReadFile(profile)
+	return err == nil && strings.Contains(string(b), ".devkit/env")
+}
+
+// ensureProfile makes the shell profile source ~/.devkit/env, once. It returns
+// the profile path (""  when the shell is unknown) and whether a line was added.
+func ensureProfile() (profile string, added bool, err error) {
+	profile = profilePath()
+	if profile == "" || profileSourcesEnv(profile) {
+		return profile, false, nil
+	}
+	f, err := os.OpenFile(profile, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644)
+	if err != nil {
+		return profile, false, err
+	}
+	defer f.Close()
+	if _, err := f.WriteString(profileLine); err != nil {
+		return profile, false, err
+	}
+	return profile, true, nil
 }
 
 // PathHint returns a message telling the user how to make the tools available
 // in new shells, or "" if nothing needs to be done.
 func PathHint(statuses []Status) string {
-	for _, s := range statuses {
-		if s.Installed {
-			return fmt.Sprintf("tools were installed for you; add them to new shells with:\n    echo 'source \"$HOME/.devkit/env\"' >> ~/.zshrc   # or ~/.bashrc")
-		}
+	if !anyInstalled(statuses) {
+		return ""
 	}
-	return ""
+	if p := profilePath(); p != "" && profileSourcesEnv(p) {
+		return fmt.Sprintf("tools were installed for you and put on PATH through %s (sourced from %s); restart your shell, or run now:\n    . \"$HOME/.devkit/env\"", shortHome(envFile()), shortHome(p))
+	}
+	return "tools were installed for you; add them to new shells with:\n    echo '. \"$HOME/.devkit/env\"' >> ~/.zshrc   # or ~/.bashrc"
 }

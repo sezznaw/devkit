@@ -209,7 +209,13 @@ work on a blank machine: it checks git (never installed, only hinted), Go
 toolchains required by go.mod are auto-fetched by Go itself), and
 kitex/thriftgo (`go install` at the versions the component's vars pin). It
 prepends the tool dirs to the current process PATH so later hooks find them,
-and writes `~/.devkit/env` (rustup-style) for future shells. Colour lives in
+writes `~/.devkit/env` (rustup-style, one guarded `export PATH` line per directory,
+including devkit's own directory when it is under `$HOME`) for future shells, and
+after installing something appends `. "$HOME/.devkit/env"` to the shell profile
+(`profilePath`: zsh → `$ZDOTDIR/.zshrc`, bash → `~/.bash_profile` on darwin,
+`~/.bashrc` elsewhere; other shells get the manual hint). `install.sh` writes the
+same env line for `INSTALL_DIR` when it is not on PATH and the same profile line,
+so either side may run first. Colour lives in
 `internal/ui/style.go`: a `Styler` per stream (`ui.Stdout`, `ui.Stderr`, off
 unless that stream is a terminal; `NO_COLOR`, `TERM=dumb`, `CI`,
 `DEVKIT_PLAIN` disable, `CLICOLOR_FORCE=1` forces). `Styler.Line` colours a

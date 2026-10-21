@@ -93,9 +93,40 @@ fi
 install -m 0755 "$tmp/devkit" "$INSTALL_DIR/devkit"
 
 echo "installed to $INSTALL_DIR/devkit"
+
+# Make devkit reachable from new shells when INSTALL_DIR is not on PATH
+# (/usr/local/bin usually is; the ~/.local/bin fallback usually is not).
+# One file carries the PATH changes, rustup-style: ~/.devkit/env, which devkit
+# itself also fills with the tools it installs (Go, kitex, thriftgo). The shell
+# profile sources it; the line is added once and only for shells we know.
 case ":$PATH:" in
   *":$INSTALL_DIR:"*) ;;
-  *) echo "note: add $INSTALL_DIR to your PATH" ;;
+  *)
+    env_file="$HOME/.devkit/env"
+    mkdir -p "$HOME/.devkit"
+    case "$INSTALL_DIR" in
+      "$HOME"/*) dir='$HOME'"${INSTALL_DIR#"$HOME"}" ;;
+      *) dir=$INSTALL_DIR ;;
+    esac
+    if ! grep -qsF -- "\"$dir:\$PATH\"" "$env_file"; then
+      [ -s "$env_file" ] || echo "# devkit: tools installed for you; your shell profile sources this file." > "$env_file"
+      echo "case \":\$PATH:\" in *\":$dir:\"*) ;; *) export PATH=\"$dir:\$PATH\" ;; esac" >> "$env_file"
+    fi
+    profile=
+    case "$(basename "${SHELL:-}")" in
+      zsh) profile="${ZDOTDIR:-$HOME}/.zshrc" ;;
+      bash) if [ "$os" = darwin ]; then profile="$HOME/.bash_profile"; else profile="$HOME/.bashrc"; fi ;;
+    esac
+    if [ -n "$profile" ]; then
+      if ! grep -qsF '.devkit/env' "$profile"; then
+        printf '\n. "$HOME/.devkit/env"  # devkit: tools on PATH\n' >> "$profile"
+        echo "added $INSTALL_DIR to PATH: $profile sources $env_file"
+      fi
+      echo "restart your shell, or run now:  . \"\$HOME/.devkit/env\""
+    else
+      echo "note: add $INSTALL_DIR to your PATH, e.g. source $env_file from your shell profile"
+    fi
+    ;;
 esac
 
 # Seed the config if none exists yet.

@@ -23,6 +23,11 @@ tool at the project's AGENTS.md. Starting a new project is below.
 curl -fsSL https://raw.githubusercontent.com/sezznaw/devkit/main/install.sh | sh
 ```
 
+The binary goes to `/usr/local/bin`, or to `~/.local/bin` when that is not
+writable; in the second case the installer puts the directory on PATH for you
+(a line in `~/.zshrc`, or `~/.bashrc` / `~/.bash_profile` for bash, sources
+`~/.devkit/env`). Open a new shell, or run `. "$HOME/.devkit/env"` in this one.
+
 **2. Create a service**
 
 Go to the directory that holds (or will hold) your project's services and run:
@@ -355,10 +360,13 @@ from go.dev into `~/.devkit/go`; missing generators are installed with
 `go install` at the versions the template pins. git is the only thing devkit
 does not install (macOS: `xcode-select --install`).
 
-If something was installed, add it to new shells once:
+Whatever was installed is put on PATH for new shells: devkit writes the
+directories to `~/.devkit/env` (one guarded `export PATH=...` per directory, so
+sourcing it twice changes nothing) and makes your shell profile source that file,
+once, for zsh and bash. With another shell, do it yourself:
 
 ```sh
-echo 'source "$HOME/.devkit/env"' >> ~/.zshrc    # or ~/.bashrc
+echo '. "$HOME/.devkit/env"' >> ~/.config/<your shell>/...   # whatever your shell reads at start-up
 ```
 
 ## Commands

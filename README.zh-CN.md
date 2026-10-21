@@ -12,6 +12,8 @@
 curl -fsSL https://raw.githubusercontent.com/sezznaw/devkit/main/install.sh | sh
 ```
 
+二进制装到 `/usr/local/bin`；那里不可写时装到 `~/.local/bin`，这时安装脚本会替你把这个目录加进 PATH（在 `~/.zshrc`，bash 则是 `~/.bashrc` / `~/.bash_profile`，加一行 source `~/.devkit/env`）。开个新 shell，或在当前 shell 里执行 `. "$HOME/.devkit/env"`。
+
 **2. 创建服务**
 
 进入用来放（或将要放）项目服务的目录，执行：
@@ -197,10 +199,10 @@ CI 按这个 IDL 提交构建，锁落后于检出或该提交还没推到服务
 
 `ngs` 第一步会检查 git、Go、`kitex` 和 `thriftgo`。没有 Go 就从 go.dev 下载到 `~/.devkit/go`；缺生成器就按模板锁定的版本 `go install`。只有 git 不会代装（macOS 执行 `xcode-select --install`）。
 
-如果有工具是这次装的，把它们加进以后的 shell 只需一次：
+这次装的工具会自动进以后 shell 的 PATH：devkit 把目录写进 `~/.devkit/env`（每个目录一行带守卫的 `export PATH=...`，source 两次也不会重复），并让你的 shell 配置文件 source 这个文件，只加一次，支持 zsh 和 bash。用别的 shell 就自己加：
 
 ```sh
-echo 'source "$HOME/.devkit/env"' >> ~/.zshrc    # 或 ~/.bashrc
+echo '. "$HOME/.devkit/env"' >> ~/.config/<你的 shell>/...   # 你的 shell 启动时读的那个文件
 ```
 
 ## 命令
