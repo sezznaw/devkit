@@ -36,8 +36,9 @@ type Runner struct {
 	remote int // the node port of the reverse forward
 	active bool
 
-	started  time.Time // when the marker was first written; an ack must be newer
-	ackNoted string    // the last "not in takeover mode" reason said, to say it once
+	started   time.Time // when the marker was first written; an ack must be newer
+	ackNoted  string    // the last "not in takeover mode" reason said, to say it once
+	tokenNote string    // the last "no service token" reason said, to say it once
 }
 
 // Run blocks until the context ends or a signal arrives.
@@ -161,6 +162,13 @@ func (r *Runner) writeMarker() error {
 	if profile == "" {
 		profile = "dev"
 	}
+	if err := WriteToken(r.o.ServiceDir, r.env.ServiceToken); err != nil {
+		return err
+	}
+	if note := r.env.ServiceTokenNote; note != "" && note != r.tokenNote {
+		r.say("WARNING: no service token, calls into the environment may be refused (1007): %s", note)
+	}
+	r.tokenNote = r.env.ServiceTokenNote
 	return WriteMarker(r.o.ServiceDir, Marker{Service: r.o.Service, Tag: r.o.Tag, Env: profile, EnvVars: envVars, Rewrite: r.layout.Rewrite, Services: r.layout.Services})
 }
 

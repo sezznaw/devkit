@@ -46,3 +46,53 @@ func TestReadAck(t *testing.T) {
 		t.Fatal("RemoveMarker left the ack")
 	}
 }
+
+// The token sits beside the marker, owner-only; "" and RemoveMarker take it away.
+func TestWriteToken(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(dir, ".devkit"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(dir, filepath.FromSlash(TokenFile))
+	if err := WriteToken(dir, "tok"); err != nil {
+		t.Fatal(err)
+	}
+	if b, _ := os.ReadFile(path); string(b) != "tok\n" {
+		t.Fatalf("token file %q", b)
+	}
+	if st, _ := os.Stat(path); st.Mode().Perm() != 0o600 {
+		t.Fatalf("mode %v", st.Mode())
+	}
+	if err := WriteToken(dir, ""); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(path); !os.IsNotExist(err) {
+		t.Fatal("empty token left the file")
+	}
+	_ = WriteToken(dir, "tok")
+	RemoveMarker(dir)
+	if _, err := os.Stat(path); !os.IsNotExist(err) {
+		t.Fatal("RemoveMarker left the token")
+	}
+}
+
+// The projected token of a deployment is found among its volumes; a plain
+// projected volume (configMap, the API token without an audience) is not one.
+func TestProjectedToken(t *testing.T) {
+	var d deployment
+	spec := `{"metadata":{"name":"ser-member"},"spec":{"template":{"spec":{"serviceAccountName":"ser-member","volumes":[
+		{"name":"cfg","projected":{"sources":[{"configMap":{"name":"x"}},{"serviceAccountToken":{"path":"api-token"}}]}},
+		{"name":"sportsbook-identity","projected":{"sources":[{"serviceAccountToken":{"audience":"sportsbook-rpc","expirationSeconds":3600,"path":"rpc-token"}}]}}]}}}}`
+	if err := json.Unmarshal([]byte(spec), &d); err != nil {
+		t.Fatal(err)
+	}
+	src := d.projectedToken()
+	if src == nil || src.Audience != "sportsbook-rpc" || src.ExpirationSeconds != 3600 || d.Spec.Template.Spec.ServiceAccountName != "ser-member" {
+		t.Fatalf("%+v", src)
+	}
+	var none deployment
+	_ = json.Unmarshal([]byte(`{"spec":{"template":{"spec":{"volumes":[{"name":"v","emptyDir":{}}]}}}}`), &none)
+	if none.projectedToken() != nil {
+		t.Fatal("found a token where there is none")
+	}
+}

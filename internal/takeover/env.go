@@ -33,6 +33,14 @@ type Env struct {
 	// asked for, secrets resolved: passwords, Nacos account, NACOS_ADDR,
 	// NACOS_NAMESPACE, OTEL endpoint, TENANT_CODE.
 	EnvVars map[string]string `json:"env_vars"`
+	// ServiceToken is a token of the ServiceAccount of the service asked for,
+	// signed for the audience its deployment's projected token has: what a Pod
+	// of the service would hold, so the laptop's calls into the environment are
+	// proven as that service. Short-lived; the tool renews it with every
+	// refresh. Empty when the deployment projects none; ServiceTokenNote then
+	// says why when one was expected.
+	ServiceToken     string `json:"service_token,omitempty"`
+	ServiceTokenNote string `json:"service_token_note,omitempty"`
 }
 
 // Service is a business service: Name, where its Service is and the port its
@@ -227,6 +235,16 @@ func Collect(o CollectOptions) (*Env, error) {
 	for k, v := range chosen.plain() {
 		env.EnvVars[k] = v
 	}
+	if chosen.Metadata.Name == o.Service {
+		if src := chosen.projectedToken(); src != nil {
+			tok, err := k.createToken(chosen.Metadata.Namespace, chosen.Spec.Template.Spec.ServiceAccountName, src.Audience, src.ExpirationSeconds)
+			if err != nil {
+				env.ServiceTokenNote = err.Error()
+			} else {
+				env.ServiceToken = tok
+			}
+		}
+	}
 	sort.Slice(env.Services, func(i, j int) bool { return env.Services[i].Name < env.Services[j].Name })
 	sort.Slice(env.Infra, func(i, j int) bool {
 		return env.Infra[i].Namespace+env.Infra[i].Name < env.Infra[j].Namespace+env.Infra[j].Name
@@ -255,6 +273,14 @@ type deployment struct {
 	Spec     struct {
 		Template struct {
 			Spec struct {
+				ServiceAccountName string `json:"serviceAccountName"`
+				Volumes            []struct {
+					Projected *struct {
+						Sources []struct {
+							ServiceAccountToken *tokenSource `json:"serviceAccountToken"`
+						} `json:"sources"`
+					} `json:"projected"`
+				} `json:"volumes"`
 				Containers []struct {
 					Env []struct {
 						Name      string `json:"name"`
@@ -270,6 +296,29 @@ type deployment struct {
 			} `json:"spec"`
 		} `json:"template"`
 	} `json:"spec"`
+}
+
+// tokenSource is a projected ServiceAccount token of a deployment.
+type tokenSource struct {
+	Audience          string `json:"audience"`
+	ExpirationSeconds int    `json:"expirationSeconds"`
+	Path              string `json:"path"`
+}
+
+// projectedToken is the deployment's projected ServiceAccount token with an
+// audience of its own (the one its service attaches to calls), nil if none.
+func (d *deployment) projectedToken() *tokenSource {
+	for _, v := range d.Spec.Template.Spec.Volumes {
+		if v.Projected == nil {
+			continue
+		}
+		for _, src := range v.Projected.Sources {
+			if t := src.ServiceAccountToken; t != nil && t.Audience != "" {
+				return t
+			}
+		}
+	}
+	return nil
 }
 
 // plain is the literal environment variables of the deployment's containers.
@@ -332,6 +381,28 @@ func (k kubectl) get(out any, args ...string) error {
 		return fmt.Errorf("takeover env: kubectl %s: %w", strings.Join(args, " "), err)
 	}
 	return json.Unmarshal(b, out)
+}
+
+// createToken asks the API for a token of the ServiceAccount (TokenRequest):
+// the node's account may do this for the services' accounts only.
+func (k kubectl) createToken(ns, account, audience string, seconds int) (string, error) {
+	if account == "" || account == "default" {
+		return "", fmt.Errorf("the deployment projects a token but runs as the namespace's default ServiceAccount")
+	}
+	if seconds < 600 {
+		seconds = 3600
+	}
+	cmd := exec.Command("kubectl", "create", "token", account, "-n", ns, "--audience", audience, "--duration", strconv.Itoa(seconds)+"s")
+	if k.kubeconfig != "" {
+		cmd.Env = append(os.Environ(), "KUBECONFIG="+k.kubeconfig)
+	}
+	var stderr strings.Builder
+	cmd.Stderr = &stderr
+	b, err := cmd.Output()
+	if err != nil {
+		return "", fmt.Errorf("kubectl create token %s -n %s: %v: %s (the node's account needs create on serviceaccounts/token)", account, ns, err, strings.TrimSpace(stderr.String()))
+	}
+	return strings.TrimSpace(string(b)), nil
 }
 
 // intOrStr is a Kubernetes IntOrString port.

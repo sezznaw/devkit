@@ -248,7 +248,12 @@ cluster address (service ports + 1000, infrastructure + 10000), keeps
 the Nacos group `DEV_TAKEOVER` while its port listens. The service, started
 with `APP_ENV` unset or `local` (an IDE run configuration, or `make run`) and after the tool, finds the marker, acknowledges it in `.devkit/takeover.json.ack` (the tool registers the local instance only then; otherwise it says why not) and runs in takeover mode: the
 environment's profile, tunnelled addresses, no registration, no consumers,
-no outbox relay, no delayed tasks, no metrics port. Routing lives in
+no outbox relay, no delayed tasks, no metrics port. When the service's
+deployment projects a ServiceAccount token (service identity), the node signs
+one for that ServiceAccount and the tool keeps it in
+`.devkit/takeover.json.rpc-token`, renewed every minute: the local instance's
+calls into the environment are proven as the service (kit-common v0.67.1;
+the node's account needs `create` on `serviceaccounts/token`). Routing lives in
 kit-common (`devroute`): on in `APP_ENV=dev`, off in uat and prod, where
 nothing of it is on the request path. The ssh target comes from the IDL
 repository's devkit.yaml (`takeover_ssh`); `~/.devkit/takeover.yaml` can

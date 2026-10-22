@@ -101,8 +101,30 @@ func WriteMarker(serviceDir string, m Marker) error {
 	return os.Rename(tmp, path)
 }
 
+// TokenFile holds the ServiceAccount token of the service taken over, beside
+// the marker (kit-common kitexx.TakeoverTokenSuffix); the service attaches it
+// to its calls into the environment.
+const TokenFile = MarkerFile + ".rpc-token"
+
+// WriteToken writes the token of serviceDir atomically; "" removes it.
+func WriteToken(serviceDir, token string) error {
+	path := filepath.Join(serviceDir, filepath.FromSlash(TokenFile))
+	if token == "" {
+		if err := os.Remove(path); err != nil && !os.IsNotExist(err) {
+			return err
+		}
+		return nil
+	}
+	tmp := path + ".tmp"
+	if err := os.WriteFile(tmp, []byte(token+"\n"), 0o600); err != nil {
+		return err
+	}
+	return os.Rename(tmp, path)
+}
+
 // RemoveMarker deletes the marker; a missing one is fine.
 func RemoveMarker(serviceDir string) {
 	os.Remove(filepath.Join(serviceDir, filepath.FromSlash(MarkerFile)))
 	os.Remove(filepath.Join(serviceDir, filepath.FromSlash(AckFile)))
+	os.Remove(filepath.Join(serviceDir, filepath.FromSlash(TokenFile)))
 }
