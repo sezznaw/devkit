@@ -122,6 +122,9 @@ func Run(o Options) ([]Finding, error) {
 		} else if o.ErrorsFile != "" {
 			out = append(out, checkErrorCodes(o.Root, goFiles, filepath.Join(o.IDLDir, o.ErrorsFile))...)
 		}
+		if !isAPIService(m) {
+			out = append(out, checkCallers(o.Root, filepath.Join(o.IDLDir, service, service+".thrift"))...)
+		}
 		out = append(out, checkIDLLock(o.Root, o.IDLDir, service)...)
 		out = append(out, checkIDLDeps(o.Root, o.IDLDir)...)
 	}

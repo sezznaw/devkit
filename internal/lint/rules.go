@@ -43,6 +43,7 @@ var Rules = []Rule{
 	{"domain-path", "a domain's routes are /v1/<domain>/..."},
 	{"domain-include", "a domain file includes only common.thrift"},
 	{"handler-split", "an RPC handler.go holds no business methods and a handler file holds at most handler_methods (8) RPC methods"},
+	{"callers-coverage", "every method of an RPC service's IDL is named in the callers rules of each conf profile (allow: [<the service>] when only it calls the method): with callers.default deny an unlisted method answers 1007"},
 	{"vendor-only", "third-party HTTP calls and providers: only in lint.vendor_service (project rule)"},
 	{"report-only", "report.enabled only in lint.report_service (project rule)"},
 	{"error-code", "business codes come from the errors_dir Thrift files, never a bare number (project rule)"},

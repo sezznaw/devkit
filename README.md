@@ -298,7 +298,10 @@ page / page_size / total fields (`paging`), business errors as
 `errcode.Err(code)` with the IDL's message, never a hand-written string
 (`error-msg`), an RPC handler split by
 topic (`handler-split`: handler.go holds struct, New and Ping; at most
-`lint.handler_methods` RPC methods per file, default 8), framework files
+`lint.handler_methods` RPC methods per file, default 8), every IDL method of
+an RPC service named in the callers rules of each conf profile
+(`callers-coverage`; kit-common `callers.default deny` refuses the rest),
+framework files
 untouched, the common library at the
 team's version in go.mod (`common-version`) and the project's `kit-common/`
 checkout clean (`common-checkout`: go.work makes local builds use it), zlog
