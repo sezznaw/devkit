@@ -48,6 +48,9 @@ type LintRules struct {
 	// HandlerMethods is how many RPC methods one file under handler/ may
 	// hold before rule handler-split asks for a split by topic (default 8).
 	HandlerMethods int `yaml:"handler_methods"`
+	// PlayerGateways 是玩家网关的服务名（本项目 [ser-api]）：按 conf 的 callers 规则它们调得到的 RPC
+	// 方法，不能按请求体的 uid 办事，要从 ctx 取登录者（规则 rpc-uid-from-ctx）。空：规则不跑。
+	PlayerGateways []string `yaml:"player_gateways"`
 	// Disable lists rules this project does not want.
 	Disable []string `yaml:"disable"`
 }

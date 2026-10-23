@@ -35,18 +35,12 @@ func checkCallers(root, idlFile string) []Finding {
 		if err != nil {
 			continue
 		}
-		var conf struct {
-			Callers struct {
-				Rules []struct {
-					Methods []string `yaml:"methods"`
-				} `yaml:"rules"`
-			} `yaml:"callers"`
-		}
-		if err := yaml.Unmarshal(b, &conf); err != nil {
+		rules, err := parseCallerRules(b)
+		if err != nil {
 			continue // the service's own config check reports it
 		}
 		named := map[string]bool{}
-		for _, r := range conf.Callers.Rules {
+		for _, r := range rules {
 			for _, m := range r.Methods {
 				named[strings.TrimSpace(m)] = true
 			}
@@ -65,6 +59,36 @@ func checkCallers(root, idlFile string) []Finding {
 		}
 	}
 	return out
+}
+
+// callerRule 是 conf 里 callers.rules 的一条：哪些方法（"*" 是全部）、谁可以调（服务名，"*" 是任何服务）。
+// callers-coverage 和 rpc-uid-from-ctx 两条规则都读它。
+type callerRule struct {
+	Methods []string `yaml:"methods"`
+	Allow   []string `yaml:"allow"`
+}
+
+// loadCallerRules 读一份 conf 的 callers.rules。读不到或不是合法 YAML 时返回错误，调用方跳过这一份
+// （服务自己的配置检查会报）；没有 callers 段时返回空表。
+func loadCallerRules(path string) ([]callerRule, error) {
+	b, err := os.ReadFile(path)
+	if err != nil {
+		return nil, err
+	}
+	return parseCallerRules(b)
+}
+
+// parseCallerRules 从一份 conf 的内容里解析 callers.rules。
+func parseCallerRules(b []byte) ([]callerRule, error) {
+	var conf struct {
+		Callers struct {
+			Rules []callerRule `yaml:"rules"`
+		} `yaml:"callers"`
+	}
+	if err := yaml.Unmarshal(b, &conf); err != nil {
+		return nil, err
+	}
+	return conf.Callers.Rules, nil
 }
 
 // serviceBlockMethods lists the method names of the Thrift file's service

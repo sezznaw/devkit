@@ -44,6 +44,7 @@ var Rules = []Rule{
 	{"domain-include", "a domain file includes only common.thrift"},
 	{"handler-split", "an RPC handler.go holds no business methods and a handler file holds at most handler_methods (8) RPC methods"},
 	{"callers-coverage", "every method of an RPC service's IDL is named in the callers rules of each conf profile (allow: [<the service>] when only it calls the method): with callers.default deny an unlisted method answers 1007"},
+	{"rpc-uid-from-ctx", "an RPC method a player gateway may call (lint.player_gateways, via the conf callers rules) never acts on the uid in its request body: kitexx.LoginUID(ctx) / kitexx.CheckMemberUID(ctx, uid); `// @target-uid` on the IDL method when the uid is the object acted on (project rule)"},
 	{"vendor-only", "third-party HTTP calls and providers: only in lint.vendor_service (project rule)"},
 	{"report-only", "report.enabled only in lint.report_service (project rule)"},
 	{"error-code", "business codes come from the errors_dir Thrift files, never a bare number (project rule)"},

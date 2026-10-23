@@ -29,6 +29,7 @@ rules, from <idl>/devkit.yaml:
     errors_dir: errors              # error-code Thrift files, one per domain (unset: rule off)
     error_ranges: {member: 2000-2999} # the codes each file may declare
     handler_methods: 8              # RPC methods one handler file may hold (handler-split)
+    player_gateways: [ser-api]      # RPC methods these may call take the login from ctx, not req.Uid (rpc-uid-from-ctx; unset: off)
     disable: []                     # rules this project does not want (names: devkit lint --rules)
 
 Run it inside a service (make lint does), or in the project directory for
@@ -82,7 +83,7 @@ Exit status 1 when there are findings, so CI stops.`,
 				pd = projectDir // the kit-common/ checkout is checked once per run
 			}
 			findings, err := lint.Run(lint.Options{Root: root, IDLDir: idlDir, ProjectDir: pd,
-				VendorService: rules.Lint.VendorService, ReportService: rules.Lint.ReportService, MoneyWords: rules.Lint.MoneyWords, ErrorsFile: rules.Lint.ErrorsFile, ErrorsDir: rules.Lint.ErrorsDir, ErrorRanges: rules.Lint.ErrorRanges, HandlerMethods: rules.Lint.HandlerMethods, Disable: rules.Lint.Disable})
+				VendorService: rules.Lint.VendorService, ReportService: rules.Lint.ReportService, MoneyWords: rules.Lint.MoneyWords, ErrorsFile: rules.Lint.ErrorsFile, ErrorsDir: rules.Lint.ErrorsDir, ErrorRanges: rules.Lint.ErrorRanges, HandlerMethods: rules.Lint.HandlerMethods, PlayerGateways: rules.Lint.PlayerGateways, Disable: rules.Lint.Disable})
 			if err != nil {
 				return err
 			}

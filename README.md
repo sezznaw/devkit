@@ -301,6 +301,11 @@ topic (`handler-split`: handler.go holds struct, New and Ping; at most
 `lint.handler_methods` RPC methods per file, default 8), every IDL method of
 an RPC service named in the callers rules of each conf profile
 (`callers-coverage`; kit-common `callers.default deny` refuses the rest),
+an RPC method a player gateway may call (by those callers rules) never acting
+on the uid in its request body (`rpc-uid-from-ctx`: the login travels in the
+context, so `kitexx.LoginUID(ctx)`, or `kitexx.CheckMemberUID(ctx, uid)` for a
+method players and the back office share; `// @target-uid` on the IDL method
+when the uid is the object acted on; needs `lint.player_gateways`),
 framework files
 untouched, the common library at the
 team's version in go.mod (`common-version`) and the project's `kit-common/`
@@ -316,7 +321,9 @@ Thrift files per domain, with a comment each, inside their domain's range,
 and used as the generated `errcode` constants: `error-code`, `error-dup`,
 `error-range`, `error-comment`),
 `lint.report_service` (the only service that may open the report database:
-`report-only`), `lint.handler_methods`, `lint.disable`.
+`report-only`), `lint.handler_methods`, `lint.player_gateways` (the player
+gateways, `[ser-api]`: the RPC methods they may call take the login from the
+context, not from the request: `rpc-uid-from-ctx`), `lint.disable`.
 Every finding says what to do instead; exit status 1 stops CI. A line opts
 out of one rule with `//devkit:lint-ignore <rule>`. `idl-lock` closes the
 "push the IDL first" trap of separate repositories: `make gen` writes

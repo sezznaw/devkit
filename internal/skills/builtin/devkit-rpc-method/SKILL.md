@@ -34,6 +34,7 @@ cd idl && git add -A && git commit -m "feat(member): UpdateAvatar" && git push &
 - 业务错误：`return nil, errcode.Err(errcode.BadCredentials)`（消息就是 errors 文件里那行注释）；要补细节 `errcode.Errf(errcode.MemberNotFound, "uid 7")`。**不要手写消息字符串**（lint 规则 error-msg），不要写数字码。
 - 分页：`page, size, offset := pagex.Normalize(req.Page)`（调用方没传 page 块时 `req.Page` 是 nil，Normalize 按第 1 页、默认条数处理）。
 - 需要锁、缓存、延时任务、事件：用 `rt.X`（AGENTS.md「框架替你做了什么」的表），不要自己造。
+- 玩家网关调得到的方法（conf 的 callers 规则放行了 `lint.player_gateways` 里的网关）不要按 `req.Uid` 办事——网关被攻破就能拿任意 uid 来调。登录者随上下文传到了这里：只给玩家用的方法 `uid, err := kitexx.LoginUID(ctx)`（无登录者回 1004）；玩家与后台共用的方法先 `kitexx.CheckMemberUID(ctx, req.Uid)`（会员调用者必须等于目标 uid）。uid 确实是被操作的对象（后台替别人改）时，在 IDL 方法注释加 `// @target-uid`（lint 规则 rpc-uid-from-ctx）。
 - 调别的服务的写方法（请求带 `request_id`）：`request_id` 传 `req.RequestId` 或 `kitexx.RequestID(ctx)`；一次请求里对同一个方法调多次，各用 `kitexx.SubRequestID(ctx, "fee")` 这样按业务命名的 id。**不要新生成 UUID / 时间戳**——上游重试时下游会再执行一次（lint 规则 request-id-source；客户端中间件也会拒绝这种调用）。消费者、延时任务、job 里先 `ctx = kitexx.WithRequestID(ctx, "<动作>:"+业务键)`（每次重跑相同），再传 `kitexx.RequestID(ctx)`。
 
 ## 5. 测试：`handler/<主题>_test.go`
@@ -60,4 +61,5 @@ make test && go vet ./...
 | `missing method Xxx` | 第 4 步没实现这个方法 |
 | import cycle | 测试包名写成了 `handler`，改 `handler_test` |
 | lint error-code / error-msg | 代码里写了数字码或手写消息，改 `errcode.X` / `errcode.Err` |
+| lint rpc-uid-from-ctx | 玩家网关可达的方法按 `req.Uid` 办事：改 `kitexx.LoginUID(ctx)` / `kitexx.CheckMemberUID(ctx, req.Uid)`；uid 是被操作对象时 IDL 方法注释加 `// @target-uid` |
 | 想加 code/msg 到响应 | 不加：壳由网关出口加（AGENTS.md「框架替你做了什么」、idl README「响应壳」） |

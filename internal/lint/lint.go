@@ -63,6 +63,9 @@ type Options struct {
 	// ProjectDir is the project directory holding the kit-common/ checkout;
 	// "" skips the common-checkout rule (set it for one service of a run).
 	ProjectDir string
+	// PlayerGateways 是玩家网关的服务名（idl/devkit.yaml 的 lint.player_gateways，本项目是 ser-api）：
+	// 它们调得到的 RPC 方法不能按请求体的 uid 办事（规则 rpc-uid-from-ctx）。空表示不跑这条规则。
+	PlayerGateways []string
 }
 
 // Ignore marks a line a rule must skip: `//devkit:lint-ignore <rule>` (Go)
@@ -123,7 +126,9 @@ func Run(o Options) ([]Finding, error) {
 			out = append(out, checkErrorCodes(o.Root, goFiles, filepath.Join(o.IDLDir, o.ErrorsFile))...)
 		}
 		if !isAPIService(m) {
-			out = append(out, checkCallers(o.Root, filepath.Join(o.IDLDir, service, service+".thrift"))...)
+			idl := filepath.Join(o.IDLDir, service, service+".thrift")
+			out = append(out, checkCallers(o.Root, idl)...)
+			out = append(out, checkUIDFromCtx(o.Root, goFiles, idl, o.PlayerGateways)...)
 		}
 		out = append(out, checkIDLLock(o.Root, o.IDLDir, service)...)
 		out = append(out, checkIDLDeps(o.Root, o.IDLDir)...)
