@@ -306,6 +306,24 @@ on the uid in its request body (`rpc-uid-from-ctx`: the login travels in the
 context, so `kitexx.LoginUID(ctx)`, or `kitexx.CheckMemberUID(ctx, uid)` for a
 method players and the back office share; `// @target-uid` on the IDL method
 when the uid is the object acted on; needs `lint.player_gateways`),
+a service touching only the Redis key prefixes registered to it
+(`redis-key-owner`: a string literal that starts with another service's prefix
+from the project's key registry, or an import of another service's
+key-building lib package, is refused; framework keys `<kind>:<service>:*` are
+prefixed by redisx and never written by hand; needs `lint.redis_keys`), no
+go-redis Pub/Sub between services (`redis-pubsub`: `Subscribe` / `PSubscribe` /
+`SSubscribe` / `Publish` on a Redis client is refused; a cross-service
+notification is a Kafka event, which is durable, replayable and authorised per
+service, and a genuinely service-internal use carries
+`//devkit:lint-ignore redis-pubsub`), events published only to the service's
+own topic (`event-owner`: in `events.<x>` x must equal the service's domain,
+the service name without `ser-`, constants resolved; `callbacks.*` only from
+`lint.vendor_service`; extra producers for a transition in
+`lint.event_producers`; consuming is unrestricted), a table model used only by
+the service that owns the table (`model-owner`: a non-test file that references
+another service's `model.X` / `mysql.X`, or `rt.AutoMigrate` of another
+service's model, is refused; the owner map is `lint.model_owners`, transitional
+exceptions `lint.model_owner_exceptions`; framework tables are exempt),
 framework files
 untouched, the common library at the
 team's version in go.mod (`common-version`) and the project's `kit-common/`
@@ -323,7 +341,14 @@ and used as the generated `errcode` constants: `error-code`, `error-dup`,
 `lint.report_service` (the only service that may open the report database:
 `report-only`), `lint.handler_methods`, `lint.player_gateways` (the player
 gateways, `[ser-api]`: the RPC methods they may call take the login from the
-context, not from the request: `rpc-uid-from-ctx`), `lint.disable`.
+context, not from the request: `rpc-uid-from-ctx`), `lint.redis_keys` (the
+Redis key-prefix registry, a path relative to the IDL directory: one line per
+prefix with its owner and the other services allowed, `pkg` lines for
+key-building lib packages: `redis-key-owner`), `lint.event_producers` (topic →
+extra services allowed to publish it during a transition: `event-owner`),
+`lint.model_owners` + `lint.model_owner_exceptions` (which service owns each
+table model, and the cross-service references still tolerated: `model-owner`),
+`lint.disable`.
 Every finding says what to do instead; exit status 1 stops CI. A line opts
 out of one rule with `//devkit:lint-ignore <rule>`. `idl-lock` closes the
 "push the IDL first" trap of separate repositories: `make gen` writes

@@ -49,6 +49,7 @@ hertzx.OK(c, &common.Empty{})                         // 有数据就 hertzx.OK(
 - **不要写 `c.JSON`**（lint 规则 envelope-write）。`make gen` 自动加的 `hertz_gen/common` import 不要删。
 - 分页转发：领域包里的 `paging.go` 把 HTTP 的 page 转给 RPC（`hertz_gen/common` 和 `kitex_gen/common` 是两个 Go 类型），照已有领域的写。
 - 领域内的辅助函数放同一个包的另一个文件；跨领域共用的放 `internal/shared/`。
+- 网关不 import `lib/model`、不读 Redis 业务键，一切数据经 RPC（lint 规则 model-owner、redis-key-owner）；网关自己确实要存的东西（钉住的角色、空闲计时这类）用登记给网关的前缀。
 
 ## 5. 第一次调某个 RPC 服务
 

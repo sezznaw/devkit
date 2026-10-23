@@ -9,7 +9,7 @@ description: 任务收尾——改完代码后跑 devkit report 拿到事实（�
 
 ## 步骤
 
-1. **先把活做完**：改动的每个服务 `make gen && make lint && make test` 通过。没过就先修，不要带着失败收尾。
+1. **先把活做完**：改动的每个服务 `make gen && make lint && make test` 通过。没过就先修，不要带着失败收尾。登记也算活：新的 Redis 键前缀登记进项目的键登记表（`lint.redis_keys` 指向的文件）、新主题进 `idl/topics.txt`、新表的结构体名进 `idl/devkit.yaml` 的 `lint.model_owners` 自己那一行——lint 的 redis-key-owner / event-owner / model-owner 报了多半是没登记或登记错了，不要用 lint-ignore 糊过去。
 
 2. **部署后检查（AGENTS.md「给服务加一条部署后检查」）**。这次任务如果新增了对外的**读**能力——RPC 的查询方法、网关的读接口、后台的 `.view` 接口——在同一次提交里给它加一条只读检查：
    - 网关：扩 `app/verify.go` 里 `login-and-read` 那条，登录后多调一下新接口（公开接口直接 `gw.Post`）。

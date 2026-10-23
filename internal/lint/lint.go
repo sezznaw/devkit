@@ -66,6 +66,15 @@ type Options struct {
 	// PlayerGateways 是玩家网关的服务名（idl/devkit.yaml 的 lint.player_gateways，本项目是 ser-api）：
 	// 它们调得到的 RPC 方法不能按请求体的 uid 办事（规则 rpc-uid-from-ctx）。空表示不跑这条规则。
 	PlayerGateways []string
+	// RedisKeysFile 是 Redis 业务键登记表（idl/devkit.yaml 的 lint.redis_keys，相对 IDLDir）：别的服务登记的前缀和
+	// 键构造包本服务不许碰（规则 redis-key-owner）。空表示不跑。
+	RedisKeysFile string
+	// EventProducers 是主题 → 额外允许的生产者（lint.event_producers）：规则 event-owner 默认只许发 events.<本服务领域>。
+	EventProducers map[string][]string
+	// ModelOwners 是服务 → 它拥有的 lib 表模型（lint.model_owners）；ModelOwnerExceptions 是服务 → 阶段 1 前暂时允许
+	// 引用的别家模型（lint.model_owner_exceptions）。ModelOwners 为空表示规则 model-owner 不跑。
+	ModelOwners          map[string][]string
+	ModelOwnerExceptions map[string][]string
 }
 
 // Ignore marks a line a rule must skip: `//devkit:lint-ignore <rule>` (Go)
@@ -97,6 +106,14 @@ func Run(o Options) ([]Finding, error) {
 			return nil, err
 		}
 		out = append(out, fs...)
+	}
+	out = append(out, checkRedisPubSub(o.Root, goFiles)...)
+	out = append(out, checkEventOwner(o.Root, service, o.VendorService, goFiles, o.EventProducers)...)
+	out = append(out, checkModelOwner(o.Root, service, goFiles, o.ModelOwners, o.ModelOwnerExceptions)...)
+	if o.IDLDir != "" && o.RedisKeysFile != "" {
+		reg := loadKeyRegistry(filepath.Join(o.IDLDir, o.RedisKeysFile), filepath.ToSlash(filepath.Join("idl", o.RedisKeysFile)))
+		out = append(out, reg.errs...)
+		out = append(out, checkRedisKeyOwner(o.Root, service, goFiles, reg)...)
 	}
 	out = append(out, checkFrameworkFiles(o.Root, m)...)
 	out = append(out, checkCommonVersion(o.Root, m)...)

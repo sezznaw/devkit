@@ -51,6 +51,15 @@ type LintRules struct {
 	// PlayerGateways 是玩家网关的服务名（本项目 [ser-api]）：按 conf 的 callers 规则它们调得到的 RPC
 	// 方法，不能按请求体的 uid 办事，要从 ctx 取登录者（规则 rpc-uid-from-ctx）。空：规则不跑。
 	PlayerGateways []string `yaml:"player_gateways"`
+	// RedisKeys 是 Redis 业务键登记表，相对 IDL 目录（如 redis-keys.txt）：`<前缀> <所有者> [允许 ...]` 与
+	// `pkg <lib 包后缀> <所有者> [允许 ...]`；别的服务的前缀和键构造包本服务不许碰（规则 redis-key-owner）。空：不跑。
+	RedisKeys string `yaml:"redis_keys"`
+	// EventProducers 是主题 → 额外允许发它的服务（规则 event-owner 默认只许发 events.<本服务领域>），给过渡期代发用。
+	EventProducers map[string][]string `yaml:"event_producers"`
+	// ModelOwners 是服务 → 它拥有的 lib/model/mysql 表结构体名（它 AutoMigrate）；别的服务引用或迁移它们会被
+	// 规则 model-owner 拦。ModelOwnerExceptions 是服务 → 阶段 1 前暂时允许引用的别家模型。
+	ModelOwners          map[string][]string `yaml:"model_owners"`
+	ModelOwnerExceptions map[string][]string `yaml:"model_owner_exceptions"`
 	// Disable lists rules this project does not want.
 	Disable []string `yaml:"disable"`
 }

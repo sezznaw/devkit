@@ -83,7 +83,7 @@ Exit status 1 when there are findings, so CI stops.`,
 				pd = projectDir // the kit-common/ checkout is checked once per run
 			}
 			findings, err := lint.Run(lint.Options{Root: root, IDLDir: idlDir, ProjectDir: pd,
-				VendorService: rules.Lint.VendorService, ReportService: rules.Lint.ReportService, MoneyWords: rules.Lint.MoneyWords, ErrorsFile: rules.Lint.ErrorsFile, ErrorsDir: rules.Lint.ErrorsDir, ErrorRanges: rules.Lint.ErrorRanges, HandlerMethods: rules.Lint.HandlerMethods, PlayerGateways: rules.Lint.PlayerGateways, Disable: rules.Lint.Disable})
+				VendorService: rules.Lint.VendorService, ReportService: rules.Lint.ReportService, MoneyWords: rules.Lint.MoneyWords, ErrorsFile: rules.Lint.ErrorsFile, ErrorsDir: rules.Lint.ErrorsDir, ErrorRanges: rules.Lint.ErrorRanges, HandlerMethods: rules.Lint.HandlerMethods, PlayerGateways: rules.Lint.PlayerGateways, RedisKeysFile: rules.Lint.RedisKeys, EventProducers: rules.Lint.EventProducers, ModelOwners: rules.Lint.ModelOwners, ModelOwnerExceptions: rules.Lint.ModelOwnerExceptions, Disable: rules.Lint.Disable})
 			if err != nil {
 				return err
 			}
