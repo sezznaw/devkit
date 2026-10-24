@@ -498,7 +498,10 @@ var (
 	fieldRE  = regexp.MustCompile(`^\s*\d+\s*:\s*(?:optional\s+|required\s+)?([\w.<>, ]+?)\s+(\w+)`)
 	// fieldFullRE also captures the field id and the optional/required keyword.
 	fieldFullRE = regexp.MustCompile(`^\s*(\d+)\s*:\s*(optional\s+|required\s+)?([\w.<>, ]+?)\s+(\w+)`)
-	methodRE    = regexp.MustCompile(`^\s*(\w+)\s+(\w+)\s*\(\s*\d+\s*:\s*(\w+)\s+\w+\s*\)\s*(\(.*\))?`)
+	// methodRE: a service method line. The return type may be qualified (common.Empty) or a container
+	// (list<Item>, map<string, i64>); the argument type may be qualified. Groups: return, name, argument
+	// type, annotations.
+	methodRE = regexp.MustCompile(`^\s*([\w.]+(?:<[\w.<>, ]+>)?)\s+(\w+)\s*\(\s*\d+\s*:\s*([\w.]+)\s+\w+\s*\)\s*(\(.*\))?`)
 	// A method whose name carries a read verb (anywhere, as a camel-case
 	// word: MemberGetProfile, EgressCheck, ListOrders) changes nothing and
 	// needs no request_id. Token issuance counts as a read.
