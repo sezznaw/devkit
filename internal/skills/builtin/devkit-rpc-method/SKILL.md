@@ -35,6 +35,7 @@ cd idl && git add -A && git commit -m "feat(member): UpdateAvatar" && git push &
 - 分页：`page, size, offset := pagex.Normalize(req.Page)`（调用方没传 page 块时 `req.Page` 是 nil，Normalize 按第 1 页、默认条数处理）。
 - 需要锁、缓存、延时任务、事件：用 `rt.X`（AGENTS.md「框架替你做了什么」的表），不要自己造。
 - 玩家网关调得到的方法（conf 的 callers 规则放行了 `lint.player_gateways` 里的网关）不要按 `req.Uid` 办事——网关被攻破就能拿任意 uid 来调。登录者随上下文传到了这里：只给玩家用的方法 `uid, err := kitexx.LoginUID(ctx)`（无登录者回 1004）；玩家与后台共用的方法先 `kitexx.CheckMemberUID(ctx, req.Uid)`（会员调用者必须等于目标 uid）。uid 确实是被操作的对象（后台替别人改）时，在 IDL 方法注释加 `// @target-uid`（lint 规则 rpc-uid-from-ctx）。
+- 网关**没有登录态**就要调的方法（注册、登录各步、找回密码、公开查询）：IDL 方法注释加一行 `// @anonymous`（写法同 `// @target-uid`，在方法上方的注释块里），并把方法名加进四份 conf（`conf/{local,dev,uat,prod}.yaml`）的 `identity.anonymous`，和方法同一次提交；两边集合必须一致，不许写 `*`（lint 规则 anonymous-coverage）。这个标记是网关侧 lint 判断「免登录能不能调」的依据（CI 里网关看不到别的服务的 conf）。只在登录后调的方法两边都不写：kit-common `identity.require_login` enforce 时，网关不带登录者调它会被拒（1004）。要不要免登录先和人确认。
 - 调别的服务的写方法（请求带 `request_id`）：`request_id` 传 `req.RequestId` 或 `kitexx.RequestID(ctx)`；一次请求里对同一个方法调多次，各用 `kitexx.SubRequestID(ctx, "fee")` 这样按业务命名的 id。**不要新生成 UUID / 时间戳**——上游重试时下游会再执行一次（lint 规则 request-id-source；客户端中间件也会拒绝这种调用）。消费者、延时任务、job 里先 `ctx = kitexx.WithRequestID(ctx, "<动作>:"+业务键)`（每次重跑相同），再传 `kitexx.RequestID(ctx)`。
 - Redis 键只用本服务登记的前缀（项目的键登记表：`idl/devkit.yaml` 的 `lint.redis_keys` 指向的文件，通常 `idl/redis-keys.txt`）：框架键 `<种类>:<服务>:*` 由 redisx 自动加前缀，不手写；别人的键不读、不删。要别的服务的数据调它的接口，或订阅它的事件在自己库里存只读副本——也不 import 别人拥有的表模型（归属在 `lint.model_owners`）。新前缀先登记再让运维加 Valkey ACL（没加会 NOPERM）。lint 规则 redis-key-owner、model-owner。
 - 事件只发本服务领域的主题 `events.<领域>`（服务名去掉 `ser-`；过渡期例外在 `lint.event_producers`；lint 规则 event-owner）。跨服务通知不用 Redis Pub/Sub（go-redis 的 `Subscribe` / `PSubscribe` / `Publish`）：不持久、不能回放、没有按服务的授权；确属本服务内部用途加 `//devkit:lint-ignore redis-pubsub` 并说明（lint 规则 redis-pubsub）。
@@ -64,6 +65,7 @@ make test && go vet ./...
 | import cycle | 测试包名写成了 `handler`，改 `handler_test` |
 | lint error-code / error-msg | 代码里写了数字码或手写消息，改 `errcode.X` / `errcode.Err` |
 | lint rpc-uid-from-ctx | 玩家网关可达的方法按 `req.Uid` 办事：改 `kitexx.LoginUID(ctx)` / `kitexx.CheckMemberUID(ctx, req.Uid)`；uid 是被操作对象时 IDL 方法注释加 `// @target-uid` |
+| lint anonymous-coverage | conf 的 `identity.anonymous` 和 IDL 上标 `// @anonymous` 的方法对不上（IDL 标了 conf 没列、conf 列了 IDL 没标、写了 `*`）：网关免登录就要调的方法两边同时写，只在登录后调的方法两边都不写；四份 conf 都要改 |
 | lint redis-key-owner | 字符串字面量以别的服务登记的 Redis 键前缀开头，或 import 了别人的 lib 键构造包：要它的数据调它的接口；自己的新前缀先登记到键登记表（`lint.redis_keys` 指向的文件）再让运维加 ACL；框架键不手写 |
 | lint redis-pubsub | 用 go-redis 的 `Subscribe` / `PSubscribe` / `Publish` 通知别的服务：改发 Kafka 事件 `events.<领域>`；确属本服务内部用途加 `//devkit:lint-ignore redis-pubsub` 并写明原因 |
 | lint event-owner | 发了别的领域的主题（`events.<x>` 的 x 不是本服务领域，或非厂商服务发 `callbacks.*`）：要那个领域发事件就调它的接口由它自己发；过渡期例外登记 `lint.event_producers` |

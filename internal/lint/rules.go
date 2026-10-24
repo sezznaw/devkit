@@ -49,6 +49,8 @@ var Rules = []Rule{
 	{"event-owner", "Publish / PublishTx only to events.<own domain> (callbacks.* only from lint.vendor_service); another producer needs lint.event_producers"},
 	{"redis-key-owner", "no string literal with another service's Redis key prefix and no import of its key-builder package (registry lint.redis_keys, e.g. idl/redis-keys.txt): read its RPC or subscribe to its events (project rule)"},
 	{"model-owner", "no reference to a lib table model another service owns (lint.model_owners) and no rt.AutoMigrate of it; transitional reads go in lint.model_owner_exceptions (project rule)"},
+	{"anonymous-coverage", "an RPC service's conf identity.anonymous lists exactly the methods tagged // @anonymous in its IDL (the contract a gateway may call without a login)"},
+	{"public-anonymous", "a gateway's @public handlers and its middlewares only call RPC methods tagged // @anonymous in the callee's IDL; a call that carries a fresh login is marked //devkit:lint-ignore public-anonymous"},
 	{"vendor-only", "third-party HTTP calls and providers: only in lint.vendor_service (project rule)"},
 	{"report-only", "report.enabled only in lint.report_service (project rule)"},
 	{"error-code", "business codes come from the errors_dir Thrift files, never a bare number (project rule)"},

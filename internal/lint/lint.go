@@ -146,6 +146,9 @@ func Run(o Options) ([]Finding, error) {
 			idl := filepath.Join(o.IDLDir, service, service+".thrift")
 			out = append(out, checkCallers(o.Root, idl)...)
 			out = append(out, checkUIDFromCtx(o.Root, goFiles, idl, o.PlayerGateways)...)
+			out = append(out, checkAnonymousCoverage(o.Root, idl)...)
+		} else {
+			out = append(out, checkPublicAnonymous(o.Root, o.IDLDir, service, goFiles)...)
 		}
 		out = append(out, checkIDLLock(o.Root, o.IDLDir, service)...)
 		out = append(out, checkIDLDeps(o.Root, o.IDLDir)...)

@@ -306,6 +306,16 @@ on the uid in its request body (`rpc-uid-from-ctx`: the login travels in the
 context, so `kitexx.LoginUID(ctx)`, or `kitexx.CheckMemberUID(ctx, uid)` for a
 method players and the back office share; `// @target-uid` on the IDL method
 when the uid is the object acted on; needs `lint.player_gateways`),
+an RPC service's conf `identity.anonymous` naming exactly the methods its IDL
+tags `// @anonymous` (`anonymous-coverage`: that tag is the contract a gateway
+may call without a login, checked in every conf profile; a method tagged but
+not listed, listed but not tagged, or a `*` is refused), a gateway's `@public`
+handlers, its `Setup` and the middlewares hung with `h.Use(...)` calling, along
+their call chain, only RPC methods tagged `// @anonymous` in the callee's IDL
+(`public-anonymous`: otherwise the callee answers 1004 once
+`IDENTITY_REQUIRE_LOGIN` enforces; a call that carries a login just issued,
+`kitexx.WithIdentity` + `WithToken`, is marked
+`//devkit:lint-ignore public-anonymous` with the reason),
 a service touching only the Redis key prefixes registered to it
 (`redis-key-owner`: a string literal that starts with another service's prefix
 from the project's key registry, or an import of another service's

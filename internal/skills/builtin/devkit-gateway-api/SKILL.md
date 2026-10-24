@@ -14,7 +14,7 @@ description: 给 Hertz 网关加一个 HTTP 接口或改一个接口——在对
 - 文件头 `include "../common/common.thrift"` 是领域文件唯一允许的 include（lint 规则 domain-include）。
 - 方法注解 `(api.post="/v1/<领域>/<动作>")`，路径里的领域必须等于文件名（lint 规则 domain-path）。POST 还是 GET：带用户态或写一律 POST；拿不准问人。
 - 方法名不带领域前缀（`GetProfile`，不是 `MemberGetProfile`）。
-- 方法注释**第一句是接口标题**（显示在 `/docs` 左栏）：不超过 12 个字的名词短语，不带标点、错误码和括号说明，同一组接口用同一个前缀加「·」或序号（「验证码·查询」「找回密码 1 核对账号」；不用「：」，apidoc 把它当标题分隔符），lint 规则 method-title；规则、错误码、说明从第二句起写。注释里的标记：`// @public` 免登录（**要先问人**）；后台接口 `// @perm <领域>.<动作>`（view / manage）；登录、注册、密码类 `// @limit 30/m`。
+- 方法注释**第一句是接口标题**（显示在 `/docs` 左栏）：不超过 12 个字的名词短语，不带标点、错误码和括号说明，同一组接口用同一个前缀加「·」或序号（「验证码·查询」「找回密码 1 核对账号」；不用「：」，apidoc 把它当标题分隔符），lint 规则 method-title；规则、错误码、说明从第二句起写。注释里的标记：`// @public` 免登录（**要先问人**；它的 handler 只能调标了 `// @anonymous` 的 RPC，见第 4 步）；后台接口 `// @perm <领域>.<动作>`（view / manage）；登录、注册、密码类 `// @limit 30/m`。
 - 列表接口：请求 `1: common.PageReq page`，响应 `items` + `common.PageInfo page`。
 
 ## 2. 推送 IDL
@@ -50,6 +50,7 @@ hertzx.OK(c, &common.Empty{})                         // 有数据就 hertzx.OK(
 - 分页转发：领域包里的 `paging.go` 把 HTTP 的 page 转给 RPC（`hertz_gen/common` 和 `kitex_gen/common` 是两个 Go 类型），照已有领域的写。
 - 领域内的辅助函数放同一个包的另一个文件；跨领域共用的放 `internal/shared/`。
 - 网关不 import `lib/model`、不读 Redis 业务键，一切数据经 RPC（lint 规则 model-owner、redis-key-owner）；网关自己确实要存的东西（钉住的角色、空闲计时这类）用登记给网关的前缀。
+- **`@public` 接口只能调 `@anonymous` 的 RPC**：`@public` 接口的 handler（连同它调到的辅助函数）、`app.Setup` 和 `h.Use(...)` 挂的中间件，沿调用链（按函数名递归）调到的每个 `deps.X.Method(`，都必须是被调服务 IDL 上标了 `// @anonymous` 的方法（lint 规则 public-anonymous）。这些地方没有登录态，被调服务 `identity.require_login` enforce 下会回 1004。被调方法还没标的，按 `devkit-rpc-method` 给它加 `// @anonymous` 和 conf 的 `identity.anonymous`（先和人确认它确实该免登录）。确实带着刚签出的登录态的调用（登录 / 注册成功后 `kitexx.WithIdentity` + `kitexx.WithToken` 再调 TouchLogin 这类），或只在登录后才会运行的分支，在那一行行尾写 `//devkit:lint-ignore public-anonymous —— <为什么这里有登录态>`：原因写具体（「登录成功后带新签令牌调」），不写「误报」。
 
 ## 5. 第一次调某个 RPC 服务
 
@@ -70,3 +71,9 @@ hertzx.OK(c, &common.Empty{})                         // 有数据就 hertzx.OK(
 ## 后台网关（realm admin）的接口多一步
 
 注释里 `// @perm <领域>.<动作>`（view / manage）；权限点不用登记，框架从 IDL 生成权限点目录，角色页立刻能勾。`.view` 接口顺手扩一条部署后检查。前端怎么配合（生成类型、菜单的权限点）看项目的 AGENTS.md。
+
+## 常见错
+
+| 现象 | 原因 / 做法 |
+|---|---|
+| lint public-anonymous | `@public` 接口的 handler（或 `Setup`、`h.Use` 挂的中间件）沿调用链调到了被调服务 IDL 上没标 `// @anonymous` 的 RPC：这里没有登录态，enforce 下被调方回 1004。该方法确实该免登录 → 按 `devkit-rpc-method` 给它加 `// @anonymous` 和 conf 的 `identity.anonymous`；这一行确实带着刚签出的登录态（`kitexx.WithIdentity` + `kitexx.WithToken`，如登录成功后调 TouchLogin）或只在登录后才运行 → 行尾写 `//devkit:lint-ignore public-anonymous —— <为什么这里有登录态>`，原因写具体，不写「误报」 |
