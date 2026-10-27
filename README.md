@@ -261,7 +261,9 @@ override it and the tag per project (`projects: {<dir name>: {ssh, tag}}`).
 `devkit tunnel` opens the same connection without taking anything over, for
 a database client or the Nacos console on this machine. It prints the
 credentials of every backend: what all services share once, what differs
-(each service's Nacos account, database password ...) under each service.
+or is a service's own account (`*_SERVICE_*`, each service's Nacos account
+...) under each service, a MySQL password with the account it is for
+(`MYSQL_SERVICE_PASSWORD`: `<tenant>_<domain>`; `MYSQL_<NAME>_PASSWORD`: `<name>`).
 A node whose devkit predates that gives one service's, and tunnel says so.
 
 ### Lint: the team's rules, enforced

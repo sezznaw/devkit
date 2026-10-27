@@ -112,18 +112,39 @@ func printTunnel(l *takeover.Layout, env *takeover.Env, target string, all, reve
 		}
 	}
 	used := map[string]bool{}
-	// varying are the variables whose value is not the same in every
-	// service (or that some service lacks); they are printed per service.
+	// varying are the variables printed per service: those two services
+	// hold different values of, and a service's own account (*_SERVICE_*:
+	// MYSQL_SERVICE_PASSWORD ...) even where one service has it. The rest
+	// are printed once (shared), also when only some services have them.
 	perService := l.ServiceEnvVars
 	varying := map[string]bool{}
+	shared := map[string]string{}
+	for k, v := range l.EnvVars {
+		shared[k] = v
+	}
 	for _, vars := range perService {
 		for k, v := range vars {
-			for _, other := range perService {
-				if w, ok := other[k]; !ok || w != v {
-					varying[k] = true
-				}
+			if w, ok := shared[k]; (ok && w != v) || strings.Contains(k, "_SERVICE_") {
+				varying[k] = true
 			}
+			shared[k] = v
 		}
+	}
+	for k := range varying {
+		delete(shared, k)
+	}
+	// value is a variable's value as printed, with the account it is the
+	// password of when the name tells (service "" for a shared one).
+	value := func(k, v, service string) string {
+		out := show(k, v)
+		tenant := shared["TENANT_CODE"]
+		if t, ok := perService[service]["TENANT_CODE"]; ok {
+			tenant = t
+		}
+		if user := mysqlUser(k, service, tenant); user != "" {
+			out += "  " + st.Dim("user "+user)
+		}
+		return out
 	}
 	serviceNames := make([]string, 0, len(perService))
 	for name := range perService {
@@ -151,7 +172,7 @@ func printTunnel(l *takeover.Layout, env *takeover.Env, target string, all, reve
 					fmt.Printf("  %s\n", st.Bold(name))
 					first = false
 				}
-				fmt.Printf("    %s  %s\n", st.Dim(fmt.Sprintf("%-38s", k)), show(k, v))
+				fmt.Printf("    %s  %s\n", st.Dim(fmt.Sprintf("%-38s", k)), value(k, v, name))
 			}
 		}
 		for _, k := range keys {
@@ -186,10 +207,10 @@ func printTunnel(l *takeover.Layout, env *takeover.Env, target string, all, reve
 		if how := howTo(f); how != "" {
 			fmt.Printf("  %s\n", how)
 		}
-		for _, k := range sortedKeys(l.EnvVars) {
-			if !used[k] && !varying[k] && relatedVar(k, f.What) {
+		for _, k := range sortedKeys(shared) {
+			if !used[k] && relatedVar(k, f.What) {
 				used[k] = true
-				fmt.Printf("  %s  %s\n", st.Dim(fmt.Sprintf("%-40s", k)), show(k, l.EnvVars[k]))
+				fmt.Printf("  %s  %s\n", st.Dim(fmt.Sprintf("%-40s", k)), value(k, shared[k], ""))
 			}
 		}
 		printPerService(func(k string) bool { return relatedVar(k, f.What) })
@@ -203,8 +224,8 @@ func printTunnel(l *takeover.Layout, env *takeover.Env, target string, all, reve
 	}
 	if all {
 		var rest []string
-		for _, k := range sortedKeys(l.EnvVars) {
-			if !used[k] && !varying[k] {
+		for _, k := range sortedKeys(shared) {
+			if !used[k] {
 				rest = append(rest, k)
 			}
 		}
@@ -215,7 +236,7 @@ func printTunnel(l *takeover.Layout, env *takeover.Env, target string, all, reve
 		if len(rest) > 0 || restVarying {
 			fmt.Printf("%s\n", st.Cyan(st.Bold("other settings")))
 			for _, k := range rest {
-				fmt.Printf("  %s  %s\n", st.Dim(fmt.Sprintf("%-40s", k)), show(k, l.EnvVars[k]))
+				fmt.Printf("  %s  %s\n", st.Dim(fmt.Sprintf("%-40s", k)), value(k, shared[k], ""))
 			}
 			printPerService(func(string) bool { return true })
 			fmt.Println()
@@ -224,6 +245,29 @@ func printTunnel(l *takeover.Layout, env *takeover.Env, target string, all, reve
 	if hidden > 0 {
 		fmt.Println(st.Dim(fmt.Sprintf("%d more ports forwarded (the %d services at their port + 1000, Tempo, Centrifugo, internal RPC, metrics, probes); --all lists them with their settings", hidden, len(env.Services))))
 	}
+}
+
+// mysqlUser is the MySQL account a password variable belongs to, "" when
+// the name does not tell. MYSQL_SERVICE_PASSWORD is the service's own
+// account, <tenant>_<domain>, the domain being the service name without
+// "ser-", "-" as "_" (kit-common mysqlx.ServiceDatabase / DomainName; a
+// conf that sets mysql.domain names another). MYSQL_<NAME>_PASSWORD is the
+// account <name> (platform, tenant_a: the environment's MySQL init).
+func mysqlUser(k, service, tenant string) string {
+	name, ok := strings.CutPrefix(k, "MYSQL_")
+	if !ok {
+		return ""
+	}
+	if name, ok = strings.CutSuffix(name, "_PASSWORD"); !ok || name == "" {
+		return ""
+	}
+	if name == "SERVICE" {
+		if service == "" || tenant == "" {
+			return ""
+		}
+		return tenant + "_" + strings.ReplaceAll(strings.TrimPrefix(service, "ser-"), "-", "_")
+	}
+	return strings.ToLower(name)
 }
 
 // kindName is the friendly name of an infrastructure Service.
