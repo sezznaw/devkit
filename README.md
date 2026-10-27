@@ -259,7 +259,10 @@ nothing of it is on the request path. The ssh target comes from the IDL
 repository's devkit.yaml (`takeover_ssh`); `~/.devkit/takeover.yaml` can
 override it and the tag per project (`projects: {<dir name>: {ssh, tag}}`).
 `devkit tunnel` opens the same connection without taking anything over, for
-a database client or the Nacos console on this machine.
+a database client or the Nacos console on this machine. It prints the
+credentials of every backend: what all services share once, what differs
+(each service's Nacos account, database password ...) under each service.
+A node whose devkit predates that gives one service's, and tunnel says so.
 
 ### Lint: the team's rules, enforced
 
@@ -433,7 +436,7 @@ echo '. "$HOME/.devkit/env"' >> ~/.config/<your shell>/...   # whatever your she
 | `devkit ai [tool...]` | write the pointer file your AI coding tool reads on start (CLAUDE.md, .cursorrules, ...) so it finds `idl/AGENTS.md`, and copy the skills (devkit's built-in four plus the project's `idl/skills/`) to `.agents/skills/` and `.claude/skills/`. No argument lists the tools; `--all` writes every pointer, `--clean` removes what devkit wrote |
 | `devkit auth <gitlab-url>` | save a GitLab personal access token (asked interactively) for this machine: devkit's API calls, git over HTTPS and go's private modules all use it (~/.devkit/hosts.yaml, ~/.netrc, GOPRIVATE) |
 | `devkit takeover <service>` | take a service of the development environment over from this machine for the requests that carry `X-Dev-Tag: <your tag>`: one ssh tunnel to the environment's node, the local instance registered in Nacos while it listens, a marker file the service reads to run against the environment (tunnelled addresses, no registration, no background workers). Everything else keeps going to the environment's own instances; stop and traffic is back. `takeover list` shows who takes what. Needs kit-common's devroute in the services (on in `APP_ENV=dev` only) and the `takeover` account on the node (infra) |
-| `devkit tunnel` | reach the development environment's middleware from this machine: the same ssh connection as takeover with the local forwards only (MySQL 13306, Redis 16379, Nacos 18848, Kafka 19093 ... infrastructure port + 10000, services + 1000), the deployments' credentials printed once to the terminal, nothing written. Run in the project directory; Ctrl+C closes it |
+| `devkit tunnel` | reach the development environment's middleware from this machine: the same ssh connection as takeover with the local forwards only (MySQL 13306, Redis 16379, Nacos 18848, Kafka 19093 ... infrastructure port + 10000, services + 1000), every backend's credentials printed once to the terminal (per service where they differ), nothing written. Run in the project directory; Ctrl+C closes it |
 | `devkit report` | the facts of a piece of work across the project's repositories, as a Markdown hand-over with blanks for what only the author knows: repositories, commits, pushed state, files (framework files flagged), IDL methods / structs / error codes, lint and test results, post-deploy check touched or not. `--since 24h\|3d\|<ref>`, `--no-run`, `--json` |
 | `devkit pull <project>` | clone every repository of the project's GitLab group you can see into ./<project>/, flat, and set the directory up (devkit.yaml, go.work, kit-common/, hooks, locks, make tools); run again to update. First time: `--gitlab`, `--group` when they differ from the saved/only token and the project name |
 | `devkit doctor` | show the state of git, Go, kitex, thriftgo and hz against the team's versions. `--fix` installs what is missing and replaces a generator of another version |

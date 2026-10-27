@@ -29,6 +29,8 @@ type Layout struct {
 	Services map[string]string
 	// EnvVars are Env.EnvVars with cluster addresses rewritten.
 	EnvVars map[string]string
+	// ServiceEnvVars are Env.ServiceEnvVars, rewritten the same way.
+	ServiceEnvVars map[string]map[string]string
 	// NacosAddr is the local Nacos address ("127.0.0.1:18848"), "" when the
 	// environment has no Service with port 8848.
 	NacosAddr string
@@ -138,6 +140,16 @@ func PlanWith(env *Env, taken func(port int) bool, prefer map[string]int) (*Layo
 	}
 	for k, v := range env.EnvVars {
 		l.EnvVars[k] = l.rewriteValue(v)
+	}
+	if len(env.ServiceEnvVars) > 0 {
+		l.ServiceEnvVars = map[string]map[string]string{}
+		for name, vars := range env.ServiceEnvVars {
+			m := map[string]string{}
+			for k, v := range vars {
+				m[k] = l.rewriteValue(v)
+			}
+			l.ServiceEnvVars[name] = m
+		}
 	}
 	sort.Slice(l.Forwards, func(i, j int) bool { return l.Forwards[i].LocalPort < l.Forwards[j].LocalPort })
 	return l, nil

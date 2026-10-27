@@ -25,7 +25,8 @@ var tunnelCmd = &cobra.Command{
 forwards only: every Service of the environment's infrastructure and every
 business service becomes a local port (infrastructure port + 10000, service
 port + 1000), and the credentials the deployments use are printed once, to
-the terminal. Connect your database client to 127.0.0.1:<port>. Nothing is
+the terminal, per service where the services differ (each has its own
+Nacos account, database user ...). Connect your database client to 127.0.0.1:<port>. Nothing is
 registered and no file is written; Ctrl+C closes everything.
 
 Run it in the project directory: the node comes from that project's
@@ -39,9 +40,13 @@ devkit.yaml (takeover_ssh), so each project reaches its own environment.`,
 		}
 		ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 		defer stop()
-		env, err := takeover.FetchEnv(ctx, target, "")
+		// Every backend's credentials; a node whose devkit predates that
+		// answers "*" with an error, and then one service's are shown.
+		env, err := takeover.FetchEnv(ctx, target, takeover.AllServices)
 		if err != nil {
-			return err
+			if env, err = takeover.FetchEnv(ctx, target, ""); err != nil {
+				return err
+			}
 		}
 		takeover.EndStale(target, "tunnel-"+osUser())
 		layout, err := takeover.Plan(env, takeover.PortTaken)
@@ -68,7 +73,8 @@ devkit.yaml (takeover_ssh), so each project reaches its own environment.`,
 // printTunnel prints one block per middleware a developer connects to: a
 // heading with the local address and the cluster name, a ready-made client
 // command, then the credentials whose variable names mention that
-// middleware. Business services and the rest of the cluster's ports are
+// middleware: the ones every service shares once, then, per service, the
+// ones that differ between services. Business services and the rest of the cluster's ports are
 // forwarded too but only counted; --all lists everything and every variable.
 func printTunnel(l *takeover.Layout, env *takeover.Env, target string, all, reveal bool) {
 	podIP := map[string]bool{}
@@ -105,8 +111,54 @@ func printTunnel(l *takeover.Layout, env *takeover.Env, target string, all, reve
 			clusterIP[stem(f.What)] = true
 		}
 	}
-	fmt.Printf("%s %s %s\n\n", st.Heading("devkit tunnel"), st.Dim("→"), st.Dim(target))
 	used := map[string]bool{}
+	// varying are the variables whose value is not the same in every
+	// service (or that some service lacks); they are printed per service.
+	perService := l.ServiceEnvVars
+	varying := map[string]bool{}
+	for _, vars := range perService {
+		for k, v := range vars {
+			for _, other := range perService {
+				if w, ok := other[k]; !ok || w != v {
+					varying[k] = true
+				}
+			}
+		}
+	}
+	serviceNames := make([]string, 0, len(perService))
+	for name := range perService {
+		serviceNames = append(serviceNames, name)
+	}
+	sort.Strings(serviceNames)
+	// printPerService prints, under each service that has any, the varying
+	// variables keep selects (and marks them used).
+	printPerService := func(keep func(k string) bool) {
+		var keys []string
+		for k := range varying {
+			if !used[k] && keep(k) {
+				keys = append(keys, k)
+			}
+		}
+		sort.Strings(keys)
+		for _, name := range serviceNames {
+			first := true
+			for _, k := range keys {
+				v, ok := perService[name][k]
+				if !ok {
+					continue
+				}
+				if first {
+					fmt.Printf("  %s\n", st.Bold(name))
+					first = false
+				}
+				fmt.Printf("    %s  %s\n", st.Dim(fmt.Sprintf("%-38s", k)), show(k, v))
+			}
+		}
+		for _, k := range keys {
+			used[k] = true
+		}
+	}
+	fmt.Printf("%s %s %s\n\n", st.Heading("devkit tunnel"), st.Dim("→"), st.Dim(target))
 	hidden := 0
 	for _, f := range l.Forwards {
 		if f.Target == "" {
@@ -135,12 +187,16 @@ func printTunnel(l *takeover.Layout, env *takeover.Env, target string, all, reve
 			fmt.Printf("  %s\n", how)
 		}
 		for _, k := range sortedKeys(l.EnvVars) {
-			if !used[k] && relatedVar(k, f.What) {
+			if !used[k] && !varying[k] && relatedVar(k, f.What) {
 				used[k] = true
 				fmt.Printf("  %s  %s\n", st.Dim(fmt.Sprintf("%-40s", k)), show(k, l.EnvVars[k]))
 			}
 		}
+		printPerService(func(k string) bool { return relatedVar(k, f.What) })
 		fmt.Println()
+	}
+	if perService == nil {
+		fmt.Println(st.Dim("the credentials are one service's: the node's devkit predates per-service credentials (rerun the node setup with a newer devkit)"))
 	}
 	if !reveal {
 		fmt.Println(st.Dim("passwords and keys are masked; --reveal prints them (they then sit in your terminal's scrollback)"))
@@ -148,15 +204,20 @@ func printTunnel(l *takeover.Layout, env *takeover.Env, target string, all, reve
 	if all {
 		var rest []string
 		for _, k := range sortedKeys(l.EnvVars) {
-			if !used[k] {
+			if !used[k] && !varying[k] {
 				rest = append(rest, k)
 			}
 		}
-		if len(rest) > 0 {
+		restVarying := false
+		for k := range varying {
+			restVarying = restVarying || !used[k]
+		}
+		if len(rest) > 0 || restVarying {
 			fmt.Printf("%s\n", st.Cyan(st.Bold("other settings")))
 			for _, k := range rest {
 				fmt.Printf("  %s  %s\n", st.Dim(fmt.Sprintf("%-40s", k)), show(k, l.EnvVars[k]))
 			}
+			printPerService(func(string) bool { return true })
 			fmt.Println()
 		}
 	}

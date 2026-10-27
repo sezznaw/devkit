@@ -33,6 +33,10 @@ type Env struct {
 	// asked for, secrets resolved: passwords, Nacos account, NACOS_ADDR,
 	// NACOS_NAMESPACE, OTEL endpoint, TENANT_CODE.
 	EnvVars map[string]string `json:"env_vars"`
+	// ServiceEnvVars are, when every service was asked for (AllServices),
+	// the environment variables of each backend's deployment the way EnvVars
+	// is for one: what devkit tunnel prints per service. Keyed by deployment.
+	ServiceEnvVars map[string]map[string]string `json:"service_env_vars,omitempty"`
 	// ServiceToken is a token of the ServiceAccount of the service asked for,
 	// signed for the audience its deployment's projected token has: what a Pod
 	// of the service would hold, so the laptop's calls into the environment are
@@ -75,12 +79,16 @@ type CollectOptions struct {
 	Namespaces []string // the services' namespaces (ser-vendor lives apart from the rest)
 	Infra      []string // infrastructure namespaces
 	Secrets    []string // "namespace/name" of the secrets a deployment may draw env vars from
-	Service    string   // whose deployment's env to include; "" for none
+	Service    string   // whose deployment's env to include; "" for none, AllServices for every backend
 }
+
+// AllServices asks the node side for every backend's environment variables
+// (Env.ServiceEnvVars) instead of one service's.
+const AllServices = "*"
 
 // Collect runs on the node and gathers Env with kubectl.
 func Collect(o CollectOptions) (*Env, error) {
-	k := kubectl{kubeconfig: o.Kubeconfig}
+	k := kubectl{kubeconfig: o.Kubeconfig, secretData: map[string]map[string]string{}}
 	env := &Env{Version: 1, EnvVars: map[string]string{}}
 	var nodes struct {
 		Items []struct {
@@ -189,7 +197,7 @@ func Collect(o CollectOptions) (*Env, error) {
 			chosen = &deps[i]
 		}
 	}
-	if o.Service != "" && chosen == nil {
+	if o.Service != "" && o.Service != AllServices && chosen == nil {
 		return nil, fmt.Errorf("takeover env: no deployment %q in %s (is it a service of this environment?)", o.Service, strings.Join(o.Namespaces, ", "))
 	}
 	if chosen == nil || chosen.plain()["NACOS_ADDR"] == "" {
@@ -210,30 +218,23 @@ func Collect(o CollectOptions) (*Env, error) {
 		}
 		allowed[ref] = true
 	}
-	for name, keys := range chosen.secrets() {
-		ref := chosen.Metadata.Namespace + "/" + name
-		if !allowed[ref] {
-			continue
-		}
-		var sec struct {
-			Data map[string]string `json:"data"`
-		}
-		if err := k.get(&sec, "secret", name, "-n", chosen.Metadata.Namespace); err != nil {
-			return nil, err
-		}
-		for key, b64 := range sec.Data {
-			if keys != nil && !keys[key] {
+	vars, err := k.envOf(chosen, allowed)
+	if err != nil {
+		return nil, err
+	}
+	env.EnvVars = vars
+	if o.Service == AllServices {
+		env.ServiceEnvVars = map[string]map[string]string{}
+		for i := range deps {
+			if deps[i].plain()["NACOS_ADDR"] == "" {
 				continue
 			}
-			v, err := decodeBase64(b64)
+			vars, err := k.envOf(&deps[i], allowed)
 			if err != nil {
-				return nil, fmt.Errorf("takeover env: secret %s key %s: %w", ref, key, err)
+				return nil, err
 			}
-			env.EnvVars[key] = v
+			env.ServiceEnvVars[deps[i].Metadata.Name] = vars
 		}
-	}
-	for k, v := range chosen.plain() {
-		env.EnvVars[k] = v
 	}
 	if chosen.Metadata.Name == o.Service {
 		if src := chosen.projectedToken(); src != nil {
@@ -252,7 +253,47 @@ func Collect(o CollectOptions) (*Env, error) {
 	return env, nil
 }
 
-type kubectl struct{ kubeconfig string }
+type kubectl struct {
+	kubeconfig string
+	secretData map[string]map[string]string // "namespace/name" -> data, read once
+}
+
+// envOf is the deployment's environment variables, secrets resolved: only
+// the Secrets it draws from that allowed ("namespace/name") lists.
+func (k kubectl) envOf(d *deployment, allowed map[string]bool) (map[string]string, error) {
+	out := map[string]string{}
+	for name, keys := range d.secrets() {
+		ref := d.Metadata.Namespace + "/" + name
+		if !allowed[ref] {
+			continue
+		}
+		data, ok := k.secretData[ref]
+		if !ok {
+			var sec struct {
+				Data map[string]string `json:"data"`
+			}
+			if err := k.get(&sec, "secret", name, "-n", d.Metadata.Namespace); err != nil {
+				return nil, err
+			}
+			data = sec.Data
+			k.secretData[ref] = data
+		}
+		for key, b64 := range data {
+			if keys != nil && !keys[key] {
+				continue
+			}
+			v, err := decodeBase64(b64)
+			if err != nil {
+				return nil, fmt.Errorf("takeover env: secret %s key %s: %w", ref, key, err)
+			}
+			out[key] = v
+		}
+	}
+	for k, v := range d.plain() {
+		out[k] = v
+	}
+	return out, nil
+}
 
 type serviceList struct {
 	Items []struct {
