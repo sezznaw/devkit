@@ -30,6 +30,9 @@ type Updater struct {
 	// Target is the binary to replace; defaults to the running executable.
 	Target string
 	Log    func(format string, args ...any)
+	// Progress, when set, wraps the archive download to show a progress bar
+	// (ui.Step.Progress).
+	Progress func(r io.Reader, total int64, label string) io.Reader
 }
 
 // Latest returns the newest release tag, e.g. "v1.2.0".
@@ -98,8 +101,12 @@ func (u *Updater) Apply(ctx context.Context, tag string) (string, error) {
 	}
 	defer os.RemoveAll(tmpDir)
 
+	var src io.Reader = body
+	if u.Progress != nil {
+		src = u.Progress(body, asset.Size, archive)
+	}
 	archivePath := filepath.Join(tmpDir, archive)
-	got, err := saveAndHash(body, archivePath)
+	got, err := saveAndHash(src, archivePath)
 	if err != nil {
 		return "", err
 	}

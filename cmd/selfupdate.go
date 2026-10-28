@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"fmt"
+	"time"
 
 	"github.com/spf13/cobra"
 
@@ -9,7 +10,12 @@ import (
 	"github.com/sezznaw/devkit/internal/config"
 	"github.com/sezznaw/devkit/internal/github"
 	"github.com/sezznaw/devkit/internal/selfupdate"
+	"github.com/sezznaw/devkit/internal/ui"
 )
+
+// selfUpdateTimeout bounds each request of self-update, the archive download
+// included.
+const selfUpdateTimeout = 10 * time.Minute
 
 var selfUpdateFlags struct {
 	version string
@@ -30,7 +36,7 @@ var selfUpdateCmd = &cobra.Command{
 			repo = buildinfo.Repo
 		}
 		u := &selfupdate.Updater{
-			Client:  github.New(cfg.GitHubHost, cfg.GitHubToken),
+			Client:  github.New(cfg.GitHubHost, cfg.GitHubToken).WithTimeout(selfUpdateTimeout),
 			Repo:    repo,
 			Current: buildinfo.Version,
 			Log:     logf,
@@ -50,11 +56,20 @@ var selfUpdateCmd = &cobra.Command{
 			fmt.Printf("devkit %s installed, %s available (run `devkit self-update`)\n", buildinfo.Version, target)
 			return nil
 		}
-		exe, err := u.Apply(cmd.Context(), target)
+		r := ui.New(1)
+		var exe string
+		err = r.Step("Updating devkit to "+target, func(s *ui.Step) error {
+			u.Log = s.Log
+			u.Progress = s.Progress
+			var err error
+			exe, err = u.Apply(cmd.Context(), target)
+			return err
+		})
 		if err != nil {
+			r.Failed(err)
 			return err
 		}
-		fmt.Printf("updated %s: %s -> %s\n", exe, buildinfo.Version, target)
+		r.Done("updated %s: %s -> %s", exe, buildinfo.Version, target)
 		return nil
 	},
 }

@@ -43,6 +43,15 @@ func NewWithBase(api, raw, token string) *Client {
 	}
 }
 
+// WithTimeout returns a copy of c whose requests, body included, may take up
+// to d. The default of two minutes is too short for a release asset on a
+// slow line.
+func (c *Client) WithTimeout(d time.Duration) *Client {
+	cp := *c
+	cp.http = &http.Client{Timeout: d}
+	return &cp
+}
+
 func (c *Client) apiBase() string { return c.api }
 func (c *Client) rawBase() string { return c.raw }
 

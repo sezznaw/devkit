@@ -8,6 +8,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -45,7 +46,7 @@ func fakeGitHub(t *testing.T, archive []byte, checksums string) *httptest.Server
 			return
 		}
 		release := func() string {
-			return fmt.Sprintf(`{"tag_name":"v1.1.0","assets":[{"name":%q,"url":"%s/assets/1"},{"name":"checksums.txt","url":"%s/assets/2"}]}`, arch, srv.URL, srv.URL)
+			return fmt.Sprintf(`{"tag_name":"v1.1.0","assets":[{"name":%q,"url":"%s/assets/1","size":%d},{"name":"checksums.txt","url":"%s/assets/2"}]}`, arch, srv.URL, len(archive), srv.URL)
 		}
 		switch {
 		case strings.HasSuffix(r.URL.Path, "/releases/latest"), strings.HasSuffix(r.URL.Path, "/releases/tags/v1.1.0"):
@@ -98,6 +99,33 @@ func TestApplyReplacesBinary(t *testing.T) {
 	}
 	if left, _ := filepath.Glob(filepath.Join(filepath.Dir(target), ".devkit-update-*")); len(left) != 0 {
 		t.Errorf("temp dir left behind: %v", left)
+	}
+}
+
+func TestApplyReportsProgress(t *testing.T) {
+	archive := tarGz(t, "devkit", "NEW BINARY")
+	sum := sha256.Sum256(archive)
+	checksums := fmt.Sprintf("%s  devkit_%s_%s.tar.gz\n", hex.EncodeToString(sum[:]), runtime.GOOS, runtime.GOARCH)
+	srv := fakeGitHub(t, archive, checksums)
+	defer srv.Close()
+
+	target := filepath.Join(t.TempDir(), "devkit")
+	os.WriteFile(target, []byte("OLD"), 0o755)
+	var gotTotal int64
+	var gotLabel string
+	u := &Updater{Client: clientFor(srv), Repo: "sezznaw/devkit", Target: target, Log: func(string, ...any) {},
+		Progress: func(r io.Reader, total int64, label string) io.Reader {
+			gotTotal, gotLabel = total, label
+			return r
+		}}
+	if _, err := u.Apply(context.Background(), "v1.1.0"); err != nil {
+		t.Fatal(err)
+	}
+	if gotTotal != int64(len(archive)) || gotLabel != fmt.Sprintf("devkit_%s_%s.tar.gz", runtime.GOOS, runtime.GOARCH) {
+		t.Errorf("Progress(total=%d, label=%q), want total %d and the archive name", gotTotal, gotLabel, len(archive))
+	}
+	if got, _ := os.ReadFile(target); string(got) != "NEW BINARY" {
+		t.Errorf("binary not replaced: %q", got)
 	}
 }
 
