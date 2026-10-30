@@ -284,6 +284,18 @@ var fileContentSuffix = regexp.MustCompile(`(?i)_(data|base64|content|bytes|blob
 // upload method a service has (GetUploadURL, kind in the request).
 var uploadMethod = regexp.MustCompile(`(?i)upload|presign`)
 
+// uploadRespFields is all that GetUploadURL's response may carry.
+var uploadRespFields = map[string]bool{"upload_url": true, "file_key": true, "expires_in": true}
+
+func sortedFields(set map[string]bool) []string {
+	out := make([]string, 0, len(set))
+	for f := range set {
+		out = append(out, f)
+	}
+	sort.Strings(out)
+	return out
+}
+
 // isRateType: common.Decimal / Decimal, or a container of it.
 func isRateType(typ string) bool {
 	t := strings.TrimSpace(typ)
@@ -626,6 +638,17 @@ func checkIDL(path string, api bool, moneyName *regexp.Regexp) ([]Finding, error
 		returns[m[1]] = true
 		if method == "GetUploadURL" {
 			hasGetUploadURL = true
+			// Its response is upload_url + file_key + expires_in and nothing else: a file URL in it ends
+			// up written into a JSON config or sent back in a request, and the database then holds an
+			// address that a change of domain, bucket or CDN cannot follow (the key is what is stored;
+			// read endpoints build the URL).
+			if !ignored(line, "upload-method") {
+				for _, f := range sortedFields(fields[strings.TrimPrefix(m[1], "common.")]) {
+					if !uploadRespFields[f] {
+						out = append(out, Finding{rel, i + 1, "upload-method", fmt.Sprintf("GetUploadURL returns %s.%s: the response carries only upload_url, file_key and expires_in. A file URL here gets written into JSON configs or sent back in requests, and the database ends up holding addresses; store the key (`<name>_key`, also inside JSON) and let the read endpoint build the URL", m[1], f)})
+					}
+				}
+			}
 		} else if !isCommonFile && uploadMethod.MatchString(method) && !ignored(line, "upload-method") {
 			out = append(out, Finding{rel, i + 1, "upload-method", fmt.Sprintf("%s: a service has one upload method, GetUploadURL(kind, content_type) → upload_url + file_key, and a kind per file (enum UploadKind in an RPC service, a string in a gateway); not one method per file field. Add a kind instead of this method", method)})
 		}

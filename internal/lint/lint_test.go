@@ -242,6 +242,36 @@ service S {
 	if strings.Count(joinRules(fs), "upload-method") != 1 || !strings.Contains(joinMessages(fs), "enum UploadKind") || !strings.Contains(joinMessages(fs), "logo_key") {
 		t.Errorf("keys without GetUploadURL: %v", fs)
 	}
+	// GetUploadURL's response carries only upload_url, file_key, expires_in: a file_url is a finding
+	idl4 := `namespace go ser_x
+enum UploadKind { LOGO = 1 }
+struct GetUploadURLReq {
+    1: UploadKind kind
+    2: string content_type
+}
+struct GetUploadURLResp {
+    1: string upload_url
+    2: string file_key
+    3: i64 expires_in
+    4: optional string file_url
+}
+service S {
+    // 申请上传链接。
+    GetUploadURLResp GetUploadURL(1: GetUploadURLReq req)
+}
+`
+	p4 := filepath.Join(dir, "ser-up.thrift")
+	os.WriteFile(p4, []byte(idl4), 0o644)
+	fs, _ = checkIDL(p4, false, mn)
+	if strings.Count(joinRules(fs), "upload-method") != 1 || !strings.Contains(joinMessages(fs), "GetUploadURLResp.file_url") {
+		t.Errorf("a file URL in the upload response is one upload-method finding: %v", fs)
+	}
+	os.WriteFile(p4, []byte(strings.Replace(idl4, "    4: optional string file_url\n", "", 1)), 0o644)
+	fs, _ = checkIDL(p4, false, mn)
+	if strings.Contains(joinRules(fs), "upload-method") {
+		t.Errorf("upload_url + file_key + expires_in is the allowed response: %v", fs)
+	}
+
 	// the same line-level opt-out on the service line
 	idl3 := strings.Replace(idl2, "service S {", "service S { // devkit:lint-ignore upload-method", 1)
 	os.WriteFile(p2, []byte(idl3), 0o644)
