@@ -340,3 +340,12 @@ args lists tools with `[devkit]`/`[yours]` marks. `syncProject` only prints a
 tip when no pointer exists. Formats with frontmatter: Cursor `.mdc`
 (alwaysApply), Windsurf (trigger: always_on), Kiro (inclusion: always),
 Augment (type: always), Continue (alwaysApply); Aider is a config file.
+
+## Registry signing (2026-11-03)
+
+The IDL repository's ownership registries (idl/devkit.yaml and the Redis key
+registry it names) are signed: `devkit registry keygen` (once; private key in
+`~/.config/devkit/registry.key`, public key pasted into
+`internal/registry/pubkey.go`), `devkit registry sign` after every edit,
+`devkit registry verify` is what lint rule `registry-signed` runs. The rule
+cannot be disabled from devkit.yaml. Rotating the key is a new devkit release.
