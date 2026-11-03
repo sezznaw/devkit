@@ -152,12 +152,16 @@ func Run(o Options) ([]Finding, error) {
 		}
 		out = append(out, checkIDLLock(o.Root, o.IDLDir, service)...)
 		out = append(out, checkIDLDeps(o.Root, o.IDLDir)...)
+		out = append(out, checkRegistrySigned(o.IDLDir)...)
 	}
 	if len(o.Disable) > 0 {
 		off := map[string]bool{}
 		for _, r := range o.Disable {
 			off[r] = true
 		}
+		// registry-signed cannot be switched off from devkit.yaml: that file is
+		// one of the signed registries, so disabling it there would be the bypass.
+		delete(off, registrySignedRule)
 		kept := out[:0]
 		for _, f := range out {
 			if !off[f.Rule] {

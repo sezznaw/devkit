@@ -31,6 +31,8 @@ rules, from <idl>/devkit.yaml:
     handler_methods: 8              # RPC methods one handler file may hold (handler-split)
     player_gateways: [ser-api]      # RPC methods these may call take the login from ctx, not req.Uid (rpc-uid-from-ctx; unset: off)
     disable: []                     # rules this project does not want (names: devkit lint --rules)
+  idl/devkit.yaml and lint.redis_keys are signed (idl/registry.sig, devkit registry sign); rule
+  registry-signed fails when they changed without a new signature and cannot be disabled.
 
 Run it inside a service (make lint does), or in the project directory for
 every service. A line can opt out of one rule with a comment:
