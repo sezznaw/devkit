@@ -349,3 +349,16 @@ registry it names) are signed: `devkit registry keygen` (once; private key in
 `internal/registry/pubkey.go`), `devkit registry sign` after every edit,
 `devkit registry verify` is what lint rule `registry-signed` runs. The rule
 cannot be disabled from devkit.yaml. Rotating the key is a new devkit release.
+
+## Deploy-check permission registry (2026-11-03)
+
+Lint rule `verify-perms` (project rule, `lint.verify_perms` in idl/devkit.yaml
+names the registry, e.g. `verify-perms.txt`, one `<gateway> <point>` per line)
+runs on gateways that declare `// @perm`: every path literal in app/verify.go
+whose IDL method carries `@perm X` needs `<gateway> X` in the registry; the
+registry itself only takes concrete `.view` points that the gateway's IDL
+declares. Why: the deploy-check account's role lives in the project's seed,
+which most colleagues cannot read, and a check calling an ungranted point
+blocked the release at PostSync (HTTP 403 / 1007) three times. The registry is
+not signed (colleagues edit it); the project's IDL pipeline turns it into the
+seed. `internal/lint/verifyperms.go`.

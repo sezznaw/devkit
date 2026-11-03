@@ -60,6 +60,9 @@ type LintRules struct {
 	// 规则 model-owner 拦。ModelOwnerExceptions 是服务 → 阶段 1 前暂时允许引用的别家模型。
 	ModelOwners          map[string][]string `yaml:"model_owners"`
 	ModelOwnerExceptions map[string][]string `yaml:"model_owner_exceptions"`
+	// VerifyPerms 是部署后检查账号的权限点登记表，相对 IDL 目录（如 verify-perms.txt）：每行 `<网关> <权限点>`，
+	// 只许 `.view`；网关 app/verify.go 调到的 @perm 接口必须登记（规则 verify-perms）。空：不跑。
+	VerifyPerms string `yaml:"verify_perms"`
 	// Disable lists rules this project does not want.
 	Disable []string `yaml:"disable"`
 }

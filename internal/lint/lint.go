@@ -75,6 +75,9 @@ type Options struct {
 	// 引用的别家模型（lint.model_owner_exceptions）。ModelOwners 为空表示规则 model-owner 不跑。
 	ModelOwners          map[string][]string
 	ModelOwnerExceptions map[string][]string
+	// VerifyPermsFile 是部署后检查账号的权限点登记表（lint.verify_perms，相对 IDLDir，每行 `<网关> <权限点>`）：
+	// 网关 app/verify.go 调到的 @perm 接口必须登记（规则 verify-perms）。空表示不跑。
+	VerifyPermsFile string
 }
 
 // Ignore marks a line a rule must skip: `//devkit:lint-ignore <rule>` (Go)
@@ -149,6 +152,9 @@ func Run(o Options) ([]Finding, error) {
 			out = append(out, checkAnonymousCoverage(o.Root, idl)...)
 		} else {
 			out = append(out, checkPublicAnonymous(o.Root, o.IDLDir, service, goFiles)...)
+			if o.VerifyPermsFile != "" {
+				out = append(out, checkVerifyPerms(o.Root, o.IDLDir, service, o.VerifyPermsFile)...)
+			}
 		}
 		out = append(out, checkIDLLock(o.Root, o.IDLDir, service)...)
 		out = append(out, checkIDLDeps(o.Root, o.IDLDir)...)
