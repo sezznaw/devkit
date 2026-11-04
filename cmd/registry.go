@@ -7,10 +7,30 @@ import (
 	"strings"
 
 	"github.com/spf13/cobra"
+	"gopkg.in/yaml.v3"
 
 	"github.com/sezznaw/devkit/internal/registry"
 	"github.com/sezznaw/devkit/internal/workspace"
 )
+
+// isRegistryRules tells the IDL repository's devkit.yaml (ownership
+// registries under lint:) from a project directory's devkit.yaml (module
+// prefix, IDL repository, template variables: never a lint: section).
+//
+// isRegistryRules 区分 IDL 仓库的 devkit.yaml（登记表在 lint: 下）和项目目录的 devkit.yaml（模块前缀、
+// IDL 仓库、模板变量，从不含 lint: 段）。
+func isRegistryRules(path string) bool {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return false
+	}
+	var top map[string]any
+	if err := yaml.Unmarshal(data, &top); err != nil {
+		return false
+	}
+	_, ok := top["lint"]
+	return ok
+}
 
 var registryFlags struct {
 	idl string
@@ -37,12 +57,32 @@ not when NOPERM shows up on dev.
 current directory.`,
 }
 
+// registryIDLDir is the directory holding the registries: --idl when given;
+// <project>/idl inside the project directory; the current directory inside the
+// IDL repository itself. The IDL repository's rules file is also named
+// devkit.yaml, so workspace.Find stops there when run inside it: a directory
+// with an idl/ subdirectory is the project, one whose devkit.yaml has the
+// lint: section is the IDL repository, anything else is a project whose idl/
+// is not checked out yet (sign then reports the missing rules file instead of
+// signing the project's own devkit.yaml).
+//
+// registryIDLDir 是登记表所在目录：给了 --idl 用它；在项目目录里是 <项目>/idl；在 IDL 仓库里就是当前目录。
+// IDL 仓库的登记表也叫 devkit.yaml，所以在 IDL 仓库里跑时 workspace.Find 会停在 IDL 仓库本身：
+// 有 idl/ 子目录的是项目目录；devkit.yaml 里有 lint: 段的是 IDL 仓库；其余是还没 clone idl/ 的项目目录
+// （这时 sign 报登记表不存在，而不是把项目自己的 devkit.yaml 签了）。
 func registryIDLDir() (string, error) {
 	if registryFlags.idl != "" {
 		return registryFlags.idl, nil
 	}
 	if dir := workspace.Find("."); dir != "" {
-		return filepath.Join(dir, "idl"), nil
+		idl := filepath.Join(dir, "idl")
+		if st, err := os.Stat(idl); err == nil && st.IsDir() {
+			return idl, nil
+		}
+		if isRegistryRules(filepath.Join(dir, registry.RulesFile)) {
+			return dir, nil
+		}
+		return idl, nil
 	}
 	if _, err := os.Stat(registry.RulesFile); err == nil {
 		return ".", nil
@@ -108,11 +148,20 @@ var registryVerifyCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
+		// Verify passes a directory without a rules file (lint: nothing is
+		// registered, nothing to protect); on the command line that is a
+		// wrong directory, not a verified registry.
+		files, err := registry.Files(dir)
+		if err != nil {
+			return err
+		}
+		if len(files) == 0 {
+			return fmt.Errorf("%s has no %s: nothing to verify (pass --idl <dir>)", dir, registry.RulesFile)
+		}
 		if err := registry.Verify(dir, registry.TeamPublicKey()); err != nil {
 			fmt.Fprintf(os.Stderr, "registry: %v\n", err)
 			os.Exit(1)
 		}
-		files, _ := registry.Files(dir)
 		fmt.Printf("registry: %s signed and unchanged\n", strings.Join(files, ", "))
 		return nil
 	},

@@ -349,6 +349,13 @@ registry it names) are signed: `devkit registry keygen` (once; private key in
 `internal/registry/pubkey.go`), `devkit registry sign` after every edit,
 `devkit registry verify` is what lint rule `registry-signed` runs. The rule
 cannot be disabled from devkit.yaml. Rotating the key is a new devkit release.
+`sign` / `verify` run from the project directory (`<project>/idl`) or from inside
+the IDL repository (its rules file is also a devkit.yaml, so `workspace.Find`
+stops there: `cmd/registry.go:registryIDLDir` tells the two apart by the `idl/`
+subdirectory, then by the `lint:` section). `verify` refuses a directory without
+a rules file; the lint rule still passes there (nothing registered). v0.36.1
+fixed both: before it, `verify` inside `idl/` looked at `idl/idl` and printed
+"signed and unchanged" for a directory that does not exist.
 
 ## Deploy-check permission registry (2026-11-03)
 
