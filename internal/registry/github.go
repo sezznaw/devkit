@@ -49,6 +49,8 @@ func (g *GitHub) Fetch(ctx context.Context, name, version string) (string, error
 		return "", errors.New("github registry: version is required")
 	}
 	dest := filepath.Join(g.cacheDir, name, version)
+	// An entry only ever appears through the rename below, complete and
+	// checked, so its component.json means the whole version is there.
 	if _, err := os.Stat(filepath.Join(dest, ComponentFile)); err == nil {
 		return dest, nil
 	}
@@ -81,6 +83,15 @@ func (g *GitHub) Fetch(ctx context.Context, name, version string) (string, error
 		return "", err
 	}
 	if err := os.Rename(tmp, dest); err != nil {
+		// Another devkit fetched the same version at the same time (several
+		// `devkit update` at once, one per service) and renamed first; the
+		// error is EEXIST or ENOTEMPTY depending on the timing. Tags are
+		// immutable, so its entry holds what we downloaded: use it, and the
+		// deferred RemoveAll drops our copy. Anything else at dest is not this
+		// version and is left alone.
+		if c, lerr := LoadComponent(dest); lerr == nil && c.Name == name && c.Version == version {
+			return dest, nil
+		}
 		return "", err
 	}
 	return dest, nil

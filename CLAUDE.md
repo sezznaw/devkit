@@ -102,7 +102,14 @@ more but stays as the empty-plan case of the same engine.
   and fetches a component version as the repository tarball at git tag
   `<name>/v<version>` (GitHub has no subpath archives, so `extractComponent`
   keeps only `components/<name>/`). Cached forever under
-  `~/.devkit/cache/<name>/<version>` because tags are immutable.
+  `~/.devkit/cache/<name>/<version>` because tags are immutable. A download
+  is extracted into its own temp directory in the cache and renamed into
+  place, so an entry is complete once it exists. Several processes fetching
+  the same version at once (one `devkit update` per service) all download it
+  and the first rename wins; a loser uses the entry when its component.json
+  names the same component and version, otherwise it returns the rename error
+  and leaves the entry alone (before 2026-11-06 every loser failed with
+  `rename ...: file exists`).
 - `Local`: reads a checkout directly (`registry_dir` / `DEVKIT_REGISTRY_DIR`).
   Ignores tags and versions; used by component authors and by tests.
 
