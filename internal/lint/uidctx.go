@@ -115,7 +115,7 @@ func loadPlayerReach(root string, gateways []string) playerReach {
 	for _, f := range files {
 		rules, err := loadCallerRules(f)
 		if err != nil {
-			continue // 服务自己的配置检查会报
+			continue // 解析不了的文件由 conf-yaml 报
 		}
 		for _, rule := range rules {
 			var via []string

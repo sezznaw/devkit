@@ -119,6 +119,7 @@ func Run(o Options) ([]Finding, error) {
 		out = append(out, checkRedisKeyOwner(o.Root, service, goFiles, reg)...)
 	}
 	out = append(out, checkFrameworkFiles(o.Root, m)...)
+	out = append(out, checkConfYAML(o.Root)...)
 	out = append(out, checkCommonVersion(o.Root, m)...)
 	out = append(out, checkCommonCheckout(o.ProjectDir)...)
 	out = append(out, checkTests(o.Root)...)

@@ -339,7 +339,10 @@ the service that owns the table (`model-owner`: a non-test file that references
 another service's `model.X` / `mysql.X`, or `rt.AutoMigrate` of another
 service's model, is refused; the owner map is `lint.model_owners`, transitional
 exceptions `lint.model_owner_exceptions`; framework tables are exempt),
-framework files
+every `conf/*.yaml` readable the way the service reads it at start-up
+(`conf-yaml`: `${VAR}` / `${VAR:-default}` expanded, then yaml.v3, which also
+refuses a key written twice in one block; a file that does not parse keeps the
+service from starting), framework files
 untouched, the common library at the
 team's version in go.mod (`common-version`) and the project's `kit-common/`
 checkout clean (`common-checkout`: go.work makes local builds use it), zlog

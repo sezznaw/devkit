@@ -37,7 +37,7 @@ func checkCallers(root, idlFile string) []Finding {
 		}
 		rules, err := parseCallerRules(b)
 		if err != nil {
-			continue // the service's own config check reports it
+			continue // conf-yaml reports a file that does not parse
 		}
 		named := map[string]bool{}
 		for _, r := range rules {
